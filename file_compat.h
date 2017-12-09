@@ -61,6 +61,14 @@
 #endif
 #if defined(__APPLE__)
 #  include <CoreFoundation/CoreFoundation.h>
+#  include <objc/objc.h>
+#  include <objc/runtime.h>
+#  include <objc/message.h>
+#  define FC_AUTORELEASEPOOL_BEGIN { \
+       id autoreleasePool = objc_msgSend(objc_msgSend((id)objc_getClass("NSAutoreleasePool"), \
+           sel_registerName("alloc")), sel_registerName("init"));
+#  define FC_AUTORELEASEPOOL_END \
+       objc_msgSend(autoreleasePool, sel_registerName("release")); }
 #endif
 
 /**
@@ -105,6 +113,8 @@ static int fc_resdir(char *path, size_t path_max) {
     path[0] = 0;
     return -1;
 #elif defined(__APPLE__)
+    int result = -1;
+    FC_AUTORELEASEPOOL_BEGIN
     CFBundleRef bundle = CFBundleGetMainBundle();
     if (bundle) {
         CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL(bundle);
@@ -120,13 +130,16 @@ static int fc_resdir(char *path, size_t path_max) {
                         path[length] = '/';
                         path[length + 1] = 0;
                     }
-                    return 0;
+                    result = 0;
                 }
             }
         }
     }
-    path[0] = 0;
-    return -1;
+    FC_AUTORELEASEPOOL_END
+    if (result != 0) {
+        path[0] = 0;
+    }
+    return result;
 #elif defined(__ANDROID__)
     path[0] = 0;
     return 0;
