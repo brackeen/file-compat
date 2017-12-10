@@ -9,7 +9,6 @@ Additionally, includes the function `fc_resdir()` to get the path to the current
 | `printf`            | Uses `OutputDebugString`*    | Uses `__android_log_print`
 | `fopen`             | Uses `fopen_s`               | Uses `AAssetManager_open` if read mode
 | `fclose`            | Adds `NULL` check            | No change
-| `chdir`             | Uses `_chdir`                | No change
 | `sleep` / `usleep`  | Uses `Sleep`                 | No change
 
 **`OutputDebugString` is only used if the debugger is present and no console is allocated. Otherwise uses `printf`.*

@@ -34,7 +34,6 @@
     | `printf`            | Uses `OutputDebugString`*    | Uses `__android_log_print`
     | `fopen`             | Uses `fopen_s`               | Uses `AAssetManager_open` if read mode
     | `fclose`            | Adds `NULL` check            | No change
-    | `chdir`             | Uses `_chdir`                | No change
     | `sleep` / `usleep`  | Uses `Sleep`                 | No change
 
     *`OutputDebugString` is only used if the debugger is present and no console is allocated.
@@ -82,12 +81,10 @@ static int fc_locale(char *locale, size_t locale_max);
 #  define WIN32_LEAN_AND_MEAN
 #  include <windows.h>
 #  include <stdlib.h> /* wcstombs_s */
-#  include <direct.h> /* _chdir */
 #  if !defined(PATH_MAX)
 #    define PATH_MAX 1024
 #  endif
 #else
-#  include <unistd.h> /* chdir */
 #  include <limits.h> /* PATH_MAX */
 #endif
 #if defined(__APPLE__)
@@ -372,7 +369,6 @@ static inline int _fc_windows_fclose(FILE *stream) {
 
 #define fopen(filename, mode) _fc_windows_fopen(filename, mode)
 #define fclose(file) _fc_windows_fclose(file)
-#define chdir(dirname) _chdir(dirname)
 
 #if defined(_DEBUG)
 
