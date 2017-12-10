@@ -23,11 +23,7 @@
 #define FILE_COMPAT_H
 
 /**
-    Redefines common `stdio` functions so that they work as expected on Windows and Android.
-
-    Additionally, includes the function `fc_resdir() to get the path to the current executable's
-    directory or its resources directory. This function works on Windows, Linux, macOS, iOS, and
-    Android.
+    ## Redefined Functions (Windows, Android):
 
     | Function            | Windows                      | Android
     |---------------------|------------------------------|-----------------------------------------
@@ -39,7 +35,15 @@
     *`OutputDebugString` is only used if the debugger is present and no console is allocated.
     Otherwise uses `printf`.
 
-    ## Usage
+    ## Added Functions (Windows, Linux, macOS, iOS, Android, Emscripten):
+
+    | Function     | Description
+    |--------------|--------------------------------------------------------------------------------
+    | `fc_resdir`  | Gets the path to the current executable's directory
+    | `fc_locale`  | Gets the user's preferred language (For example, "en-US")
+
+    ## Usage:
+
     For Android, define `FILE_COMPAT_ANDROID_ACTIVITY` to be a reference to an `ANativeActivity`
     instance or to a function that returns an `ANativeActivity` instance. May be `NULL`.
 

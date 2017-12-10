@@ -1,11 +1,12 @@
 # file-compat
 
-A C header file that redefines common `stdio` functions so that they work as expected on Windows and Android.
+A C header file to help write cross-platform code related to file I/O.
 
-Additionally, includes the function `fc_resdir()` to get the path to the current executable's directory or its resources directory. This function works on Windows, Linux, macOS, iOS, and Android. On macOS and iOS, this is the path to the bundle's resources. On Windows and Linux, this is a path to the executable's directory. On Android and Emscripten, this is an empty string.
+## Redefined functions
+These functions are redefined so that they work as expected on Windows and Android.
 
 | Function            | Windows                      | Android
-|---------------------|------------------------------|-----------------------------------------
+|---------------------|------------------------------|----------------------------------------------
 | `printf`            | Uses `OutputDebugString`*    | Uses `__android_log_print`
 | `fopen`             | Uses `fopen_s`               | Uses `AAssetManager_open` if read mode
 | `fclose`            | Adds `NULL` check            | No change
@@ -13,8 +14,18 @@ Additionally, includes the function `fc_resdir()` to get the path to the current
 
 **`OutputDebugString` is only used if the debugger is present and no console is allocated. Otherwise uses `printf`.*
 
+
+## Added functions
+These added functions work on Windows, Linux, macOS, iOS, Android, and Emscripten.
+
+| Function     | Description
+|--------------|-----------------------------------------------------------------------------------
+| `fc_resdir`  | Gets the path to the current executable's directory (Windows, Linux) or its resources directory (macOS, iOS)
+| `fc_locale`  | Gets the user's preferred language (For example, "en-US")
+
+
 ## Usage
-The goal of `file_compat.h` is to allow a developer to write code using common `stdio` functions that will work across platforms. To use, include the header and use `fopen`, `printf`, etc. like normal.
+To use, include `file_compat.h` and use `fopen`, `printf`, etc. like normal.
 
 ```C
 #include "file_compat.h"
