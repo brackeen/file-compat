@@ -30,7 +30,6 @@
     | `printf`            | Uses `OutputDebugString`*    | Uses `__android_log_print`
     | `fopen`             | Uses `fopen_s`               | Uses `AAssetManager_open` if read mode
     | `fclose`            | Adds `NULL` check            | No change
-    | `sleep` / `usleep`  | Uses `Sleep`                 | No change
 
     *`OutputDebugString` is only used if the debugger is present and no console is allocated.
     Otherwise uses `printf`.
@@ -340,21 +339,6 @@ cleanup:
 /* MARK: Windows */
 
 #if defined(_WIN32)
-
-static inline unsigned int sleep(unsigned int seconds) {
-    Sleep(seconds * 1000);
-    return 0;
-}
-
-static inline int usleep(unsigned long useconds) {
-    if (useconds >= 1000000) {
-        errno = EINVAL;
-        return -1;
-    } else {
-        Sleep(useconds / 1000);
-        return 0;
-    }
-}
 
 static inline FILE *_fc_windows_fopen(const char *filename, const char *mode) {
     FILE *file = NULL;

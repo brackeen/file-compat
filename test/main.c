@@ -34,10 +34,6 @@ int main(void) {
     fc_resdir(path, PATH_MAX);
     printf("Resources path: \"%s\"\n", path);
 
-    printf("Sleeping 2 seconds...\n");
-    sleep(2);
-    printf("Done\n");
-
     return 0;
 }
 
