@@ -406,7 +406,7 @@ FILE* funopen(const void* __cookie,
 static pthread_key_t _fc_jnienv_key;
 static pthread_once_t _fc_jnienv_key_once = PTHREAD_ONCE_INIT;
 
-static void _fc_jnienv_detatch(void *value) {
+static void _fc_jnienv_detach(void *value) {
     if (value) {
         JavaVM *vm = (JavaVM *)value;
         (*vm)->DetachCurrentThread(vm);
@@ -414,7 +414,7 @@ static void _fc_jnienv_detatch(void *value) {
 }
 
 static void _fc_create_jnienv_key() {
-    pthread_key_create(&_fc_jnienv_key, _fc_jnienv_detatch);
+    pthread_key_create(&_fc_jnienv_key, _fc_jnienv_detach);
 }
 
 static JNIEnv *_fc_jnienv(JavaVM *vm) {
