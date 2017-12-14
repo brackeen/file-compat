@@ -1,8 +1,8 @@
 # file-compat
 
-A C header file to help write cross-platform code related to file I/O.
+A C header file to help write cross-platform code related to `stdio` functions.
 
-## Redefined functions
+## Redefined `stdio` functions
 These functions are redefined so that they work as expected on Windows and Android.
 
 | Function            | Windows                      | Android
