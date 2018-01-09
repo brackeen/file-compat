@@ -53,6 +53,12 @@
 #include <stdio.h>
 #include <errno.h>
 
+#if defined(__GNUC__)
+#  define FC_UNUSED __attribute__ ((unused))
+#else
+#  define FC_UNUSED
+#endif
+
 /**
     Gets the path to the current executable's resources directory. On macOS/iOS, this is the path to
     the bundle's resources. On Windows and Linux, this is a path to the executable's directory.
@@ -66,7 +72,7 @@
     @param path_max The length of the buffer. Should be `PATH_MAX`.
     @return 0 on success, -1 on failure.
  */
-static int fc_resdir(char *path, size_t path_max);
+static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
 /**
     Gets the preferred user language in BCP-47 format. Valid examples are "en", "en-US",
@@ -78,7 +84,7 @@ static int fc_resdir(char *path, size_t path_max);
     @param locale_max The length of the buffer. This value must be at least 3.
     @return 0 on success, -1 on failure.
 */
-static int fc_locale(char *locale, size_t locale_max);
+static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 
 #if defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN
