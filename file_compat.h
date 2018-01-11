@@ -87,7 +87,9 @@ static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 
 #if defined(_WIN32)
-#  define WIN32_LEAN_AND_MEAN
+#  if !defined(WIN32_LEAN_AND_MEAN)
+#    define WIN32_LEAN_AND_MEAN
+#  endif
 #  include <windows.h>
 #  include <stdlib.h> /* wcstombs_s */
 #  if !defined(PATH_MAX)
