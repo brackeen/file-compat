@@ -1,7 +1,7 @@
 /*
  file-compat
  https://github.com/brackeen/file-compat
- Copyright (c) 2017 David Brackeen
+ Copyright (c) 2017-2019 David Brackeen
 
  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
  associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -103,11 +103,12 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <objc/objc.h>
 #  include <objc/runtime.h>
 #  include <objc/message.h>
+#  define FC_MSG_SEND ((id (*)(id, SEL))objc_msgSend)
 #  define FC_AUTORELEASEPOOL_BEGIN { \
-       id autoreleasePool = objc_msgSend(objc_msgSend((id)objc_getClass("NSAutoreleasePool"), \
+       id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND((id)objc_getClass("NSAutoreleasePool"), \
            sel_registerName("alloc")), sel_registerName("init"));
 #  define FC_AUTORELEASEPOOL_END \
-       objc_msgSend(autoreleasePool, sel_registerName("release")); }
+       FC_MSG_SEND(autoreleasePool, sel_registerName("release")); }
 #elif defined(__EMSCRIPTEN__)
 #  include <emscripten/emscripten.h>
 #  include <string.h>
