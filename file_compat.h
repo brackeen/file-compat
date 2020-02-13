@@ -1,7 +1,7 @@
 /*
  file-compat
  https://github.com/brackeen/file-compat
- Copyright (c) 2017-2019 David Brackeen
+ Copyright (c) 2017-2020 David Brackeen
 
  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
  associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -52,6 +52,12 @@
 
 #include <stdio.h>
 #include <errno.h>
+
+#if defined(_WIN32)
+#  define FC_DIRECTORY_SEPARATOR '\\'
+#else
+#  define FC_DIRECTORY_SEPARATOR '/'
+#endif
 
 #if defined(__GNUC__)
 #  define FC_UNUSED __attribute__ ((unused))
@@ -133,7 +139,7 @@ static int fc_resdir(char *path, size_t path_max) {
     DWORD length = GetModuleFileNameA(NULL, path, path_max);
     if (length > 0 && length < path_max) {
         for (DWORD i = length - 1; i > 0; i--) {
-            if (path[i] == '\\') {
+            if (path[i] == FC_DIRECTORY_SEPARATOR) {
                 path[i + 1] = 0;
                 return 0;
             }
@@ -145,7 +151,7 @@ static int fc_resdir(char *path, size_t path_max) {
     ssize_t length = readlink("/proc/self/exe", path, path_max - 1);
     if (length > 0 && (size_t)length < path_max) {
         for (ssize_t i = length - 1; i > 0; i--) {
-            if (path[i] == '/') {
+            if (path[i] == FC_DIRECTORY_SEPARATOR) {
                 path[i + 1] = 0;
                 return 0;
             }
@@ -167,8 +173,8 @@ static int fc_resdir(char *path, size_t path_max) {
                 unsigned long length = strlen(path);
                 if (length > 0 && length < path_max - 1) {
                     // Add trailing slash
-                    if (path[length - 1] != '/') {
-                        path[length] = '/';
+                    if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
+                        path[length] = FC_DIRECTORY_SEPARATOR;
                         path[length + 1] = 0;
                     }
                     result = 0;
