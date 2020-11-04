@@ -138,7 +138,7 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  if TARGET_OS_OSX
 #    include <Security/Security.h>
 #  endif
-#  if __has_feature(objc_arc)
+#  if defined(__OBJC__) && __has_feature(objc_arc1)
 #    define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
 #    define FC_AUTORELEASEPOOL_END }
 #  else
