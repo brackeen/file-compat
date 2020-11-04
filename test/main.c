@@ -9,10 +9,10 @@ Linux:
 clang -Weverything -I .. main.c && ./a.out
 
 macOS:
-clang -framework Foundation -Weverything -I .. main.c && ./a.out
+clang -framework Foundation -framework Security -Weverything -I .. main.c && ./a.out
 
 Emscripten:
-$EMSCRIPTEN_ROOT_PATH/emcc -Weverything -I .. main.c -o main.html && open main.html
+emcc -Weverything -I .. main.c -o main.html && emrun main.html
 
 */
 #if defined(__ANDROID__)
@@ -32,7 +32,33 @@ int main(void) {
 
     char path[PATH_MAX];
     fc_resdir(path, PATH_MAX);
-    printf("Resources path: \"%s\"\n", path);
+    printf("Resources dir: \"%s\"\n", path);
+
+#if defined(__APPLE__) || defined(__ANDROID__)
+    fc_datadir("com.brackeen.file_compat_test", path, PATH_MAX);
+    printf("Data dir: \"%s\"\n", path);
+
+    strcat(path, "test.txt");
+
+    FILE *file = fopen(path, "w");
+    if (file) {
+        fprintf(file, "This text was written to the data dir");
+        fclose(file);
+    } else {
+        printf("Writing failed\n");
+    }
+
+    file = fopen(path, "r");
+    if (file) {
+        char buffer[80];
+        while (fgets(buffer, sizeof(buffer), file)) {
+            printf("%s\n", buffer);
+        }
+        fclose(file);
+    } else {
+        printf("Reading failed\n");
+    }
+#endif
 
     return 0;
 }

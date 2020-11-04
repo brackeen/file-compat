@@ -38,7 +38,8 @@
 
     | Function     | Description
     |--------------|--------------------------------------------------------------------------------
-    | `fc_resdir`  | Gets the path to the current executable's directory
+    | `fc_resdir`  | Gets the path to the current executable's resources directory.
+    | `fc_datadir` | [Apple platforms and Android only] Gets the path to save data.
     | `fc_locale`  | Gets the user's preferred language (For example, "en-US")
 
     ## Usage:
@@ -73,12 +74,34 @@
     The path will have a trailing slash (or backslash on Windows), except for the empty strings for
     Android and Emscripten.
 
-    @param path The buffer to fill the path. No more than `path_max` bytes are writen to the buffer,
+    @param path The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
     including the trailing 0. If failure occurs, the path is set to an empty string.
     @param path_max The length of the buffer. Should be `PATH_MAX`.
     @return 0 on success, -1 on failure.
  */
 static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
+
+#if defined(__APPLE__) || defined(__ANDROID__)
+/**
+    Gets the path to the directory to save data.
+
+    iOS, Android: local path determined by the system
+    macOS (bundled): ~/Library/Application Support/<bundleId>/
+    macOS (sandboxed): ~/Library/Containers/<bundleId>/Data/Library/Application Support/
+    macOS (executable): ~/Library/Application Support/<appId>/
+
+    The path will have a trailing slash, and it will be created if it does not exist.
+
+    @param appId The application id, like "com.mycompany.MyApp". Only used on macOS executables with
+    no bundle.
+    @param path The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
+    including the trailing 0. If failure occurs, the path is set to an empty string.
+    @param path_max The length of the buffer. Should be `PATH_MAX`.
+    @return 0 on success, -1 on failure.
+
+ */
+static int fc_datadir(const char *appId, char *path, size_t path_max) FC_UNUSED;
+#endif
 
 /**
     Gets the preferred user language in BCP-47 format. Valid examples are "en", "en-US",
@@ -105,16 +128,27 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <limits.h> /* PATH_MAX */
 #endif
 #if defined(__APPLE__)
+#  include <TargetConditionals.h>
 #  include <CoreFoundation/CoreFoundation.h>
 #  include <objc/objc.h>
 #  include <objc/runtime.h>
 #  include <objc/message.h>
-#  define FC_MSG_SEND ((id (*)(id, SEL))objc_msgSend)
-#  define FC_AUTORELEASEPOOL_BEGIN { \
-       id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND((id)objc_getClass("NSAutoreleasePool"), \
-           sel_registerName("alloc")), sel_registerName("init"));
-#  define FC_AUTORELEASEPOOL_END \
-       FC_MSG_SEND(autoreleasePool, sel_registerName("release")); }
+#  include <objc/NSObjCRuntime.h>
+#  include <sys/stat.h> // mkdir
+#  if TARGET_OS_OSX
+#    include <Security/Security.h>
+#  endif
+#  if __has_feature(objc_arc)
+#    define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
+#    define FC_AUTORELEASEPOOL_END }
+#  else
+#    define FC_MSG_SEND ((id (*)(id, SEL))objc_msgSend)
+#    define FC_AUTORELEASEPOOL_BEGIN { \
+         id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND((id)objc_getClass("NSAutoreleasePool"), \
+             sel_registerName("alloc")), sel_registerName("init"));
+#    define FC_AUTORELEASEPOOL_END \
+         FC_MSG_SEND(autoreleasePool, sel_registerName("release")); }
+#  endif
 #elif defined(__EMSCRIPTEN__)
 #  include <emscripten/emscripten.h>
 #  include <string.h>
@@ -198,6 +232,126 @@ static int fc_resdir(char *path, size_t path_max) {
 #endif
 }
 
+#if defined(__APPLE__) && TARGET_OS_OSX
+static int fc_sandboxed(void) {
+    CFBundleRef bundle = CFBundleGetMainBundle();
+    if (!bundle) {
+        return 0;
+    }
+    int sandboxed = 0;
+    SecStaticCodeRef staticCode = NULL;
+    CFURLRef bundleURL = CFBundleCopyBundleURL(bundle);
+    if (SecStaticCodeCreateWithPath(bundleURL, kSecCSDefaultFlags, &staticCode) == errSecSuccess) {
+        SecRequirementRef sandboxRequirement;
+        if (SecStaticCodeCheckValidityWithErrors(staticCode, kSecCSBasicValidateOnly, NULL, NULL) == errSecSuccess &&
+            SecRequirementCreateWithString(CFSTR("entitlement[\"com.apple.security.app-sandbox\"] exists"),
+                                           kSecCSDefaultFlags, &sandboxRequirement) == errSecSuccess) {
+            OSStatus codeCheckResult = SecStaticCodeCheckValidityWithErrors(staticCode, kSecCSBasicValidateOnly,
+                                                                            sandboxRequirement, NULL);
+            if (codeCheckResult == errSecSuccess) {
+                sandboxed = 1;
+            }
+        }
+        CFRelease(staticCode);
+    }
+    CFRelease(bundleURL);
+    return sandboxed;
+}
+#endif
+
+#if defined(__APPLE__) || defined(__ANDROID__)
+static int fc_datadir(const char *appId, char *path, size_t path_max) {
+#if defined(__ANDROID__)
+    ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
+    size_t length = strlen(activity->internalDataPath);
+    if (length < path_max - 1) {
+        strcpy(path, activity->internalDataPath);
+        return 0;
+    } else {
+        return -1;
+    }
+#elif defined(__APPLE__)
+    int result = -1;
+    const NSUInteger NSApplicationSupportDirectory = 14;
+    const NSUInteger NSUserDomainMask = 1;
+
+    extern id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMask,
+                                                  BOOL expandTilde);
+    FC_AUTORELEASEPOOL_BEGIN
+    CFArrayRef array =
+#if __has_feature(objc_arc)
+    (__bridge CFArrayRef)
+#else
+    (CFArrayRef)
+#endif
+    NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
+                                        NSUserDomainMask, TRUE);
+    if (array && CFArrayGetCount(array) > 0) {
+        CFStringRef dir = CFArrayGetValueAtIndex(array, 0);
+        Boolean success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
+        if (success) {
+            unsigned long length = strlen(path);
+            if (length > 0 && length < path_max - 1) {
+                // Add trailing slash
+                if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
+                    path[length] = FC_DIRECTORY_SEPARATOR;
+                    path[length + 1] = 0;
+                    length++;
+                }
+                mkdir(path, 0700);
+                result = 0;
+            }
+            #if TARGET_OS_OSX
+            int bundleIdAppended = 0;
+            if (fc_sandboxed()) {
+                bundleIdAppended = 1;
+            } else {
+                CFBundleRef bundle = CFBundleGetMainBundle();
+                if (bundle) {
+                    CFStringRef bundleId = CFBundleGetIdentifier(bundle);
+                    if (bundleId) {
+                        CFIndex bundleIdLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(bundleId),
+                                                                                   kCFStringEncodingUTF8);
+                        if (bundleIdLength > 0 &&
+                            length + (unsigned long)bundleIdLength + 1 < path_max - 1 &&
+                            CFStringGetCString(bundleId, path + length, bundleIdLength,
+                                               kCFStringEncodingUTF8)) {
+                            path[length + (unsigned long)bundleIdLength] = FC_DIRECTORY_SEPARATOR;
+                            path[length + (unsigned long)bundleIdLength + 1] = 0;
+                            bundleIdAppended = 1;
+                        }
+                    }
+                }
+            }
+            if (!bundleIdAppended) {
+                if (!appId || !*appId) {
+                    result = -1;
+                } else {
+                    size_t appIdLength = strlen(appId);
+                    if (length + appIdLength + 1 < path_max - 1) {
+                        strcpy(path + length, appId);
+                        path[length + appIdLength] = FC_DIRECTORY_SEPARATOR;
+                        path[length + appIdLength + 1] = 0;
+                    } else {
+                        result = -1;
+                    }
+                }
+            }
+            if (result == 0) {
+                mkdir(path, 0700);
+            }
+            #endif
+        }
+    }
+    FC_AUTORELEASEPOOL_END
+    if (result != 0) {
+        path[0] = 0;
+    }
+    return result;
+#endif
+}
+#endif
+
 static int fc_locale(char *locale, size_t locale_max) {
     if (!locale || locale_max < 3) {
         return -1;
@@ -249,9 +403,12 @@ static int fc_locale(char *locale, size_t locale_max) {
             CFStringRef language = CFArrayGetValueAtIndex(languages, 0);
             if (language) {
                 CFIndex length = CFStringGetLength(language);
-                CFIndex outLength = 0;
-                CFStringGetBytes(language, CFRangeMake(0, length), kCFStringEncodingUTF8, 0, FALSE,
-                                 (UInt8 *)locale, (CFIndex)locale_max - 1, &outLength);
+                if (length > (CFIndex)locale_max - 1) {
+                    length = (CFIndex)locale_max - 1;
+                }
+                CFIndex outLength = CFStringGetBytes(language, CFRangeMake(0, length),
+                                                     kCFStringEncodingUTF8, 0, FALSE,
+                                                     (UInt8 *)locale, (CFIndex)locale_max - 1, NULL);
                 locale[outLength] = 0;
                 result = 0;
             }
