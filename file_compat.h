@@ -233,11 +233,16 @@ static int fc_resdir(char *path, size_t path_max) {
 static int fc_datadir(const char *appId, char *path, size_t path_max) {
 #if defined(__ANDROID__)
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
+    if (!activity->internalDataPath) {
+        path[0] = 0;
+        return -1;
+    }
     size_t length = strlen(activity->internalDataPath);
     if (length < path_max - 1) {
         strcpy(path, activity->internalDataPath);
         return 0;
     } else {
+        path[0] = 0;
         return -1;
     }
 #elif defined(__APPLE__)
