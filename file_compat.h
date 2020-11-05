@@ -135,9 +135,6 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <objc/message.h>
 #  include <objc/NSObjCRuntime.h>
 #  include <sys/stat.h> // mkdir
-#  if TARGET_OS_OSX
-#    include <Security/Security.h>
-#  endif
 #  if defined(__OBJC__) && __has_feature(objc_arc)
 #    define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
 #    define FC_AUTORELEASEPOOL_END }
@@ -232,33 +229,6 @@ static int fc_resdir(char *path, size_t path_max) {
 #endif
 }
 
-#if defined(__APPLE__) && TARGET_OS_OSX
-static int fc_sandboxed(void) {
-    CFBundleRef bundle = CFBundleGetMainBundle();
-    if (!bundle) {
-        return 0;
-    }
-    int sandboxed = 0;
-    SecStaticCodeRef staticCode = NULL;
-    CFURLRef bundleURL = CFBundleCopyBundleURL(bundle);
-    if (SecStaticCodeCreateWithPath(bundleURL, kSecCSDefaultFlags, &staticCode) == errSecSuccess) {
-        SecRequirementRef sandboxRequirement;
-        if (SecStaticCodeCheckValidityWithErrors(staticCode, kSecCSBasicValidateOnly, NULL, NULL) == errSecSuccess &&
-            SecRequirementCreateWithString(CFSTR("entitlement[\"com.apple.security.app-sandbox\"] exists"),
-                                           kSecCSDefaultFlags, &sandboxRequirement) == errSecSuccess) {
-            OSStatus codeCheckResult = SecStaticCodeCheckValidityWithErrors(staticCode, kSecCSBasicValidateOnly,
-                                                                            sandboxRequirement, NULL);
-            if (codeCheckResult == errSecSuccess) {
-                sandboxed = 1;
-            }
-        }
-        CFRelease(staticCode);
-    }
-    CFRelease(bundleURL);
-    return sandboxed;
-}
-#endif
-
 #if defined(__APPLE__) || defined(__ANDROID__)
 static int fc_datadir(const char *appId, char *path, size_t path_max) {
 #if defined(__ANDROID__)
@@ -286,67 +256,75 @@ static int fc_datadir(const char *appId, char *path, size_t path_max) {
 #endif
     NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
                                         NSUserDomainMask, TRUE);
-    if (array && CFArrayGetCount(array) > 0) {
-        CFStringRef dir = CFArrayGetValueAtIndex(array, 0);
-        Boolean success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
-        if (success) {
-            unsigned long length = strlen(path);
-            if (length > 0 && length < path_max - 1) {
-                // Add trailing slash
-                if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
-                    path[length] = FC_DIRECTORY_SEPARATOR;
-                    path[length + 1] = 0;
-                    length++;
-                }
-                mkdir(path, 0700);
-                result = 0;
-            }
-            #if TARGET_OS_OSX
-            int bundleIdAppended = 0;
-            if (fc_sandboxed()) {
+    if (!array || CFArrayGetCount(array) == 0) {
+        goto fc_datadir_fail;
+    }
+    CFStringRef dir = CFArrayGetValueAtIndex(array, 0);
+    Boolean success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
+    if (!success) {
+        goto fc_datadir_fail;
+    }
+    unsigned long length = strlen(path);
+    if (length == 0 || length + 1 >= path_max) {
+        goto fc_datadir_fail;
+    }
+    // Add trailing slash
+    if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
+        path[length] = FC_DIRECTORY_SEPARATOR;
+        path[length + 1] = 0;
+        length++;
+    }
+    mkdir(path, 0700);
+    result = 0;
+    
+#if TARGET_OS_OSX
+    int bundleIdAppended = 0;
+    CFBundleRef bundle = CFBundleGetMainBundle();
+    if (bundle) {
+        CFStringRef bundleId = CFBundleGetIdentifier(bundle);
+        if (bundleId) {
+            if (CFStringFind(dir, bundleId, 0).length != 0) {
+                // macOS sandboxed app
                 bundleIdAppended = 1;
             } else {
-                CFBundleRef bundle = CFBundleGetMainBundle();
-                if (bundle) {
-                    CFStringRef bundleId = CFBundleGetIdentifier(bundle);
-                    if (bundleId) {
-                        CFIndex bundleIdLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(bundleId),
-                                                                                   kCFStringEncodingUTF8);
-                        if (bundleIdLength > 0 &&
-                            length + (unsigned long)bundleIdLength + 1 < path_max - 1 &&
-                            CFStringGetCString(bundleId, path + length, bundleIdLength,
-                                               kCFStringEncodingUTF8)) {
-                            path[length + (unsigned long)bundleIdLength] = FC_DIRECTORY_SEPARATOR;
-                            path[length + (unsigned long)bundleIdLength + 1] = 0;
-                            bundleIdAppended = 1;
-                        }
-                    }
+                // Append bundleId (macOS bundled, non-sandboxed app)
+                CFIndex bundleIdLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(bundleId),
+                                                                           kCFStringEncodingUTF8);
+                if (bundleIdLength > 0 &&
+                    length + (unsigned long)bundleIdLength + 1 < path_max - 1 &&
+                    CFStringGetCString(bundleId, path + length, bundleIdLength,
+                                       kCFStringEncodingUTF8)) {
+                    path[length + (unsigned long)bundleIdLength] = FC_DIRECTORY_SEPARATOR;
+                    path[length + (unsigned long)bundleIdLength + 1] = 0;
+                    mkdir(path, 0700);
+                    bundleIdAppended = 1;
                 }
             }
-            if (!bundleIdAppended) {
-                if (!appId || !*appId) {
-                    result = -1;
-                } else {
-                    size_t appIdLength = strlen(appId);
-                    if (length + appIdLength + 1 < path_max - 1) {
-                        strcpy(path + length, appId);
-                        path[length + appIdLength] = FC_DIRECTORY_SEPARATOR;
-                        path[length + appIdLength + 1] = 0;
-                    } else {
-                        result = -1;
-                    }
-                }
-            }
-            if (result == 0) {
-                mkdir(path, 0700);
-            }
-            #endif
         }
     }
-    FC_AUTORELEASEPOOL_END
+    if (!bundleIdAppended) {
+        // Append appId (macOS executable)
+        if (!appId || !*appId) {
+            result = -1;
+        } else {
+            size_t appIdLength = strlen(appId);
+            if (length + appIdLength + 1 < path_max - 1) {
+                strcpy(path + length, appId);
+                path[length + appIdLength] = FC_DIRECTORY_SEPARATOR;
+                path[length + appIdLength + 1] = 0;
+                mkdir(path, 0700);
+            } else {
+                result = -1;
+            }
+        }
+    }
+#endif
+
+fc_datadir_fail:
     if (result != 0) {
         path[0] = 0;
     }
+    FC_AUTORELEASEPOOL_END
     return result;
 #endif
 }

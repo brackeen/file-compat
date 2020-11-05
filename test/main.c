@@ -9,7 +9,7 @@ Linux:
 clang -Weverything -I .. main.c && ./a.out
 
 macOS:
-clang -framework Foundation -framework Security -Weverything -I .. main.c && ./a.out
+clang -framework Foundation -Weverything -I .. main.c && ./a.out
 
 Emscripten:
 emcc -Weverything -I .. main.c -o main.html && emrun main.html
