@@ -86,13 +86,13 @@ static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
     Gets the path to the directory to save data.
 
     iOS, Android: local path determined by the system
-    macOS (bundled): ~/Library/Application Support/<bundleId>/
-    macOS (sandboxed): ~/Library/Containers/<bundleId>/Data/Library/Application Support/
-    macOS (executable): ~/Library/Application Support/<appId>/
+    macOS (executable): ~/Library/Application Support/<app_id>/
+    macOS (bundled):    ~/Library/Application Support/<bundle_id>/
+    macOS (sandboxed):  ~/Library/Containers/<bundle_id>/Data/Library/Application Support/
 
     The path will have a trailing slash, and it will be created if it does not exist.
 
-    @param appId The application id, like "com.mycompany.MyApp". Only used on macOS executables with
+    @param app_id The application id, like "com.mycompany.MyApp". Only used on macOS executables with
     no bundle.
     @param path The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
     including the trailing 0. If failure occurs, the path is set to an empty string.
@@ -100,7 +100,7 @@ static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
     @return 0 on success, -1 on failure.
 
  */
-static int fc_datadir(const char *appId, char *path, size_t path_max) FC_UNUSED;
+static int fc_datadir(const char *app_id, char *path, size_t path_max) FC_UNUSED;
 #endif
 
 /**
@@ -230,16 +230,21 @@ static int fc_resdir(char *path, size_t path_max) {
 }
 
 #if defined(__APPLE__) || defined(__ANDROID__)
-static int fc_datadir(const char *appId, char *path, size_t path_max) {
+static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #if defined(__ANDROID__)
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
-    if (!activity->internalDataPath) {
+    if (!activity || !activity->internalDataPath) {
         path[0] = 0;
         return -1;
     }
     size_t length = strlen(activity->internalDataPath);
     if (length < path_max - 1) {
         strcpy(path, activity->internalDataPath);
+        // Add trailing slash
+        if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
+            path[length] = FC_DIRECTORY_SEPARATOR;
+            path[length + 1] = 0;
+        }
         return 0;
     } else {
         path[0] = 0;
@@ -283,40 +288,41 @@ static int fc_datadir(const char *appId, char *path, size_t path_max) {
     result = 0;
     
 #if TARGET_OS_OSX
-    int bundleIdAppended = 0;
+    int bundle_id_appended = 0;
     CFBundleRef bundle = CFBundleGetMainBundle();
     if (bundle) {
-        CFStringRef bundleId = CFBundleGetIdentifier(bundle);
-        if (bundleId) {
-            if (CFStringFind(dir, bundleId, 0).length != 0) {
+        CFStringRef bundle_id = CFBundleGetIdentifier(bundle);
+        if (bundle_id) {
+            if (CFStringFind(dir, bundle_id, 0).length != 0) {
                 // macOS sandboxed app
-                bundleIdAppended = 1;
+                bundle_id_appended = 1;
             } else {
-                // Append bundleId (macOS bundled, non-sandboxed app)
-                CFIndex bundleIdLength = CFStringGetMaximumSizeForEncoding(CFStringGetLength(bundleId),
-                                                                           kCFStringEncodingUTF8);
-                if (bundleIdLength > 0 &&
-                    length + (unsigned long)bundleIdLength + 1 < path_max - 1 &&
-                    CFStringGetCString(bundleId, path + length, bundleIdLength,
+                // Append bundle_id (macOS bundled, non-sandboxed app)
+                CFIndex bundle_id_length = CFStringGetLength(bundle_id);
+                bundle_id_length = CFStringGetMaximumSizeForEncoding(bundle_id_length,
+                                                                     kCFStringEncodingUTF8);
+                if (bundle_id_length > 0 &&
+                    length + (unsigned long)bundle_id_length + 1 < path_max - 1 &&
+                    CFStringGetCString(bundle_id, path + length, bundle_id_length,
                                        kCFStringEncodingUTF8)) {
-                    path[length + (unsigned long)bundleIdLength] = FC_DIRECTORY_SEPARATOR;
-                    path[length + (unsigned long)bundleIdLength + 1] = 0;
+                    path[length + (unsigned long)bundle_id_length] = FC_DIRECTORY_SEPARATOR;
+                    path[length + (unsigned long)bundle_id_length + 1] = 0;
                     mkdir(path, 0700);
-                    bundleIdAppended = 1;
+                    bundle_id_appended = 1;
                 }
             }
         }
     }
-    if (!bundleIdAppended) {
-        // Append appId (macOS executable)
-        if (!appId || !*appId) {
+    if (!bundle_id_appended) {
+        // Append app_id (macOS executable)
+        if (!app_id || !*app_id) {
             result = -1;
         } else {
-            size_t appIdLength = strlen(appId);
-            if (length + appIdLength + 1 < path_max - 1) {
-                strcpy(path + length, appId);
-                path[length + appIdLength] = FC_DIRECTORY_SEPARATOR;
-                path[length + appIdLength + 1] = 0;
+            size_t app_id_length = strlen(app_id);
+            if (length + app_id_length + 1 < path_max - 1) {
+                strcpy(path + length, app_id);
+                path[length + app_id_length] = FC_DIRECTORY_SEPARATOR;
+                path[length + app_id_length + 1] = 0;
                 mkdir(path, 0700);
             } else {
                 result = -1;
