@@ -39,8 +39,8 @@
     | Function     | Description
     |--------------|--------------------------------------------------------------------------------
     | `fc_resdir`  | Gets the path to the current executable's resources directory.
-    | `fc_datadir` | [Apple platforms and Android only] Gets the path to save data.
-    | `fc_locale`  | Gets the user's preferred language (For example, "en-US")
+    | `fc_datadir` | Gets the path to save app data (not implemented on Emscripten).
+    | `fc_locale`  | Gets the user's preferred language (For example, "en-US").
 
     ## Usage:
 
@@ -81,17 +81,20 @@
  */
 static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
+#if !defined(__EMSCRIPTEN__)
 /**
     Gets the path to the directory to save data.
 
-    iOS, Android: local path determined by the system
-    Windows:            %HOMEPATH%\AppData\Roaming\<app_id>\
+    The path will be an expanded path with a trailing slash, and look something like this:
+ 
+    Windows:            %HOMEPATH%\\AppData\\Roaming\\<app_id>\\
+    Linux:              ~/.local/share/<app_id>/
     macOS (executable): ~/Library/Application Support/<app_id>/
     macOS (bundled):    ~/Library/Application Support/<bundle_id>/
     macOS (sandboxed):  ~/Library/Containers/<bundle_id>/Data/Library/Application Support/
+    iOS, Android:       Local path determined by the system.
 
-    The path will have a trailing slash, and it will be created if it does not exist.
+    The path will be created if it does not exist.
 
     @param app_id The application id, like "com.mycompany.MyApp". Only used on macOS executables with
     no bundle.
@@ -164,6 +167,9 @@ static JNIEnv *_fc_jnienv(JavaVM *vm);
 #elif defined(__linux__)
 #  include <locale.h>
 #  include <string.h>
+#  include <unistd.h> // readlink
+#  include <stdlib.h> // getenv
+#  include <sys/stat.h> // mkdir
 #endif
 
 static int fc_resdir(char *path, size_t path_max) {
@@ -233,7 +239,7 @@ static int fc_resdir(char *path, size_t path_max) {
 #endif
 }
 
-#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
+#if !defined(__EMSCRIPTEN__)
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #if defined(_WIN32)
     wchar_t *wpath = NULL;
@@ -265,6 +271,33 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
         path[0] = 0;
         return -1;
     }
+#elif defined(__linux__) && !defined(__ANDROID__)
+    const char *home_path = getenv("XDG_DATA_HOME");
+    int result = -1;
+    if (home_path && *home_path) {
+        result = snprintf(path, path_max, "%s/%s/", home_path, app_id);
+    } else {
+        home_path = getenv("HOME");
+        if (home_path && *home_path) {
+            result = snprintf(path, path_max, "%s/.local/share/%s/", home_path, app_id);
+        }
+    }
+    if (result <= 0 || (size_t)result >= path_max) {
+        path[0] = 0;
+        return -1;
+    }
+    char *ch = path;
+    while (*(++ch)) {
+        if (*ch == '/') {
+            *ch = 0;
+            if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+                path[0] = 0;
+                return -1;
+            }
+            *ch = '/';
+        }
+    }
+    return 0;
 #elif defined(__ANDROID__)
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
     if (!activity || !activity->internalDataPath) {
@@ -318,7 +351,9 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
         path[length + 1] = 0;
         length++;
     }
-    mkdir(path, 0700);
+    if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+        goto fc_datadir_fail;
+    }
     result = 0;
     
 #if TARGET_OS_OSX
@@ -341,7 +376,10 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
                                        kCFStringEncodingUTF8)) {
                     path[length + (unsigned long)bundle_id_length] = FC_DIRECTORY_SEPARATOR;
                     path[length + (unsigned long)bundle_id_length + 1] = 0;
-                    mkdir(path, 0700);
+                    if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+                        result = -1;
+                        goto fc_datadir_fail;
+                    }
                     bundle_id_appended = 1;
                 }
             }
@@ -357,7 +395,10 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
                 strcpy(path + length, app_id);
                 path[length + app_id_length] = FC_DIRECTORY_SEPARATOR;
                 path[length + app_id_length + 1] = 0;
-                mkdir(path, 0700);
+                if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+                    result = -1;
+                    goto fc_datadir_fail;
+                }
             } else {
                 result = -1;
             }
