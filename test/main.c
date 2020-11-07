@@ -2,9 +2,6 @@
 Windows:
 cl /Wall /I .. main.c
 
-Windows XP:
-cl /D_USING_V110_SDK71_ /I .. main.c /link /SUBSYSTEM:CONSOLE,5.01
-
 Linux:
 clang -Weverything -I .. main.c && ./a.out
 

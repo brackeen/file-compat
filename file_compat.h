@@ -381,32 +381,10 @@ static int fc_locale(char *locale, size_t locale_max) {
     }
     int result = -1;
 #if defined(_WIN32)
-    typedef int (WINAPI *GetUserDefaultLocaleName_t)(LPWSTR, int);
-    GetUserDefaultLocaleName_t pGetUserDefaultLocaleName = NULL;
-
-    // Use GetUserDefaultLocaleName on Windows Vista and newer
-    pGetUserDefaultLocaleName = (GetUserDefaultLocaleName_t)GetProcAddress(
-        GetModuleHandle("kernel32.dll"), "GetUserDefaultLocaleName");
-    if (pGetUserDefaultLocaleName) {
-        wchar_t wlocale[LOCALE_NAME_MAX_LENGTH];
-        if (pGetUserDefaultLocaleName(wlocale, LOCALE_NAME_MAX_LENGTH) > 0) {
-            size_t count = 0;
-            if (wcstombs_s(&count, locale, locale_max, wlocale, locale_max - 1) == 0) {
-                result = 0;
-            }
-        }
-    } else {
-        // Use GetLocaleInfoA on Windows XP
-        int length = GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO639LANGNAME, locale,
-                                    locale_max);
-        if (length > 0) {
-            if (locale_max - length > 0) {
-                int length2 = GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO3166CTRYNAME,
-                                             locale + length, locale_max - length);
-                if (length2 > 0) {
-                    locale[length - 1] = '-';
-                }
-            }
+    wchar_t wlocale[LOCALE_NAME_MAX_LENGTH];
+    if (GetUserDefaultLocaleName(wlocale, LOCALE_NAME_MAX_LENGTH) > 0) {
+        size_t count = 0;
+        if (wcstombs_s(&count, locale, locale_max, wlocale, locale_max - 1) == 0) {
             result = 0;
         }
     }
