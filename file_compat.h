@@ -81,11 +81,12 @@
  */
 static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
 /**
     Gets the path to the directory to save data.
 
     iOS, Android: local path determined by the system
+    Windows:            %HOMEPATH%\AppData\Roaming\<app_id>\
     macOS (executable): ~/Library/Application Support/<app_id>/
     macOS (bundled):    ~/Library/Application Support/<bundle_id>/
     macOS (sandboxed):  ~/Library/Containers/<bundle_id>/Data/Library/Application Support/
@@ -120,9 +121,12 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #    define WIN32_LEAN_AND_MEAN
 #  endif
 #  include <windows.h>
+#  include <Shlobj.h>
+#  pragma comment(lib, "Shell32.lib")
+#  pragma comment(lib, "Ole32.lib")
 #  include <stdlib.h> /* wcstombs_s */
 #  if !defined(PATH_MAX)
-#    define PATH_MAX 1024
+#    define PATH_MAX MAX_PATH
 #  endif
 #else
 #  include <limits.h> /* PATH_MAX */
@@ -229,9 +233,39 @@ static int fc_resdir(char *path, size_t path_max) {
 #endif
 }
 
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
-#if defined(__ANDROID__)
+#if defined(_WIN32)
+    wchar_t *wpath = NULL;
+    size_t count = 0; // Output count including NULL
+    size_t app_id_length = strlen(app_id);
+    int success = (SUCCEEDED(SHGetKnownFolderPath(&FOLDERID_RoamingAppData, 0, NULL, &wpath)) &&
+                   wcstombs_s(&count, path, path_max, wpath, path_max - 1) == 0 &&
+                   count > 1 && count + app_id_length + 2 <= path_max);
+    CoTaskMemFree(wpath);
+    if (!success) {
+        path[0] = 0;
+        return -1;
+    }
+    if (path[count - 2] != FC_DIRECTORY_SEPARATOR) {
+        path[count - 1] = FC_DIRECTORY_SEPARATOR;
+        path[count] = 0;
+        count++;
+    }
+    strcpy_s(path + count - 1, path_max - count, app_id);
+    count += app_id_length;
+    if (path[count - 2] != FC_DIRECTORY_SEPARATOR) {
+        path[count - 1] = FC_DIRECTORY_SEPARATOR;
+        path[count] = 0;
+    }
+    int result = SHCreateDirectoryExA(NULL, path, NULL);
+    if (result == ERROR_SUCCESS || result == ERROR_ALREADY_EXISTS) {
+        return 0;
+    } else {
+        path[0] = 0;
+        return -1;
+    }
+#elif defined(__ANDROID__)
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
     if (!activity || !activity->internalDataPath) {
         path[0] = 0;

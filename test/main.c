@@ -34,8 +34,11 @@ int main(void) {
     fc_resdir(path, PATH_MAX);
     printf("Resources dir: \"%s\"\n", path);
 
-#if defined(__APPLE__) || defined(__ANDROID__)
-    fc_datadir("com.brackeen.file_compat_test", path, PATH_MAX);
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
+    if (fc_datadir("com.brackeen.file_compat_test", path, PATH_MAX)) {
+        printf("Error: Couldn't get data dir\n");
+        return -1;
+    }
     printf("Data dir: \"%s\"\n", path);
 
     strcat(path, "test.txt");
