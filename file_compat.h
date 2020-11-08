@@ -81,7 +81,6 @@
  */
 static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
-#if !defined(__EMSCRIPTEN__)
 /**
     Gets the path to the directory to save data.
 
@@ -92,12 +91,15 @@ static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
     macOS (executable): ~/Library/Application Support/<app_id>/
     macOS (bundled):    ~/Library/Application Support/<bundle_id>/
     macOS (sandboxed):  ~/Library/Containers/<bundle_id>/Data/Library/Application Support/
-    iOS, Android:       Local path determined by the system.
+    Emscripten:         /<app_id>/
+    iOS, Android:       Local path determined by the system (not using app_id).
 
     The path will be created if it does not exist.
 
-    @param app_id The application id, like "com.mycompany.MyApp". Only used on macOS executables with
-    no bundle.
+    On Emscripten, to persist data, the path has to be mounted and synchronized to an IDBFS
+    instance. Otherwise, the files created only exist in memory.
+
+    @param app_id The application id, like "MyApp".
     @param path The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
     including the trailing 0. If failure occurs, the path is set to an empty string.
     @param path_max The length of the buffer. Should be `PATH_MAX`.
@@ -105,14 +107,13 @@ static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
  */
 static int fc_datadir(const char *app_id, char *path, size_t path_max) FC_UNUSED;
-#endif
 
 /**
     Gets the preferred user language in BCP-47 format. Valid examples are "en", "en-US",
     "zh-Hans", and "zh-Hans-HK". Some platforms may return values in lowercase ("en-us" instead of
     "en-US").
 
-    @param locale The buffer to fill the locale. No more than `locale_max` bytes are writen to the
+    @param locale The buffer to fill the locale. No more than `locale_max` bytes are written to the
     buffer, including the trailing 0. If failure occurs, the locale is set to an empty string.
     @param locale_max The length of the buffer. This value must be at least 3.
     @return 0 on success, -1 on failure.
@@ -156,6 +157,7 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #elif defined(__EMSCRIPTEN__)
 #  include <emscripten/emscripten.h>
 #  include <string.h>
+#  include <sys/stat.h> // mkdir
 #elif defined(__ANDROID__)
 #  include <android/asset_manager.h>
 #  include <android/log.h>
@@ -239,7 +241,6 @@ static int fc_resdir(char *path, size_t path_max) {
 #endif
 }
 
-#if !defined(__EMSCRIPTEN__)
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #if defined(_WIN32)
     wchar_t *wpath = NULL;
@@ -296,6 +297,14 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
             }
             *ch = '/';
         }
+    }
+    return 0;
+#elif defined(__EMSCRIPTEN__)
+    int result = snprintf(path, path_max, "/%s/", app_id);
+    if (result <= 0 || (size_t)result >= path_max ||
+        (mkdir(path, 0700) != 0 && errno != EEXIST)) {
+        path[0] = 0;
+        return -1;
     }
     return 0;
 #elif defined(__ANDROID__)
@@ -412,9 +421,10 @@ fc_datadir_fail:
     }
     FC_AUTORELEASEPOOL_END
     return result;
+#else
+#error Unsupported platform
 #endif
 }
-#endif
 
 static int fc_locale(char *locale, size_t locale_max) {
     if (!locale || locale_max < 3) {
