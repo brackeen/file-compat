@@ -37,25 +37,45 @@ int main(void) {
     }
     printf("Data dir: \"%s\"\n", path);
 
-    strcat(path, "test.txt");
-
-    FILE *file = fopen(path, "w");
+    // Read existing count
+    int count = 0;
+    strcat(path, "count.txt");
+    FILE *file = fopen(path, "r");
     if (file) {
-        fprintf(file, "This text was written to the data dir");
-        fclose(file);
-    } else {
-        printf("Writing failed\n");
-    }
-
-    file = fopen(path, "r");
-    if (file) {
-        char buffer[80];
-        while (fgets(buffer, sizeof(buffer), file)) {
-            printf("%s\n", buffer);
+        if (fscanf(file, "%i", &count) != 1) {
+            printf("Error: Couldn't read existing file from data dir\n");
+            return -1;
         }
         fclose(file);
+    }
+
+    // Write new count
+    count++;
+    file = fopen(path, "w");
+    if (!file) {
+        printf("Error: Couldn't create file in data dir\n");
+        return -1;
+    }
+    fprintf(file, "%i\n", count);
+    fclose(file);
+
+    // Check if new count was written
+    int countCheck = 0;
+    file = fopen(path, "r");
+    if (!file) {
+        printf("Error: Couldn't open newly created file in data dir\n");
+        return -1;
+    }
+    if (fscanf(file, "%i", &countCheck) != 1) {
+        printf("Error: Couldn't read newly created file from data dir\n");
+        return -1;
+    }
+    fclose(file);
+    if (count == countCheck) {
+        printf("The file count.txt was written to %i time(s)\n", count);
     } else {
-        printf("Reading failed\n");
+        printf("Error: invalid count (was %i, should be %i)\n", countCheck, count);
+        return -1;
     }
 
     return 0;
