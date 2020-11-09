@@ -143,6 +143,13 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <objc/message.h>
 #  include <objc/NSObjCRuntime.h>
 #  include <sys/stat.h> // mkdir
+#  ifdef __cplusplus
+     extern "C"
+#  else
+     extern
+#  endif
+     id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMask,
+                                            BOOL expandTilde);
 #  if defined(__OBJC__) && __has_feature(objc_arc)
 #    define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
 #    define FC_AUTORELEASEPOOL_END }
@@ -324,8 +331,15 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
     const NSUInteger NSApplicationSupportDirectory = 14;
     const NSUInteger NSUserDomainMask = 1;
 
-    extern id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMask,
-                                                  BOOL expandTilde);
+#if TARGET_OS_OSX
+    CFBundleRef bundle = NULL;
+    int bundle_id_appended = 0;
+#endif
+
+    CFStringRef dir = NULL;
+    Boolean success = NO;
+    unsigned long length = 0;
+
     FC_AUTORELEASEPOOL_BEGIN
     CFArrayRef array =
 #if __has_feature(objc_arc)
@@ -338,12 +352,12 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
     if (!array || CFArrayGetCount(array) == 0) {
         goto fc_datadir_fail;
     }
-    CFStringRef dir = CFArrayGetValueAtIndex(array, 0);
-    Boolean success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
+    dir = (CFStringRef)CFArrayGetValueAtIndex(array, 0);
+    success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
     if (!success) {
         goto fc_datadir_fail;
     }
-    unsigned long length = strlen(path);
+    length = strlen(path);
     if (length == 0 || length + 1 >= path_max) {
         goto fc_datadir_fail;
     }
@@ -359,8 +373,7 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
     result = 0;
     
 #if TARGET_OS_OSX
-    int bundle_id_appended = 0;
-    CFBundleRef bundle = CFBundleGetMainBundle();
+    bundle = CFBundleGetMainBundle();
     if (bundle) {
         CFStringRef bundle_id = CFBundleGetIdentifier(bundle);
         if (bundle_id) {
@@ -445,7 +458,7 @@ static int fc_locale(char *locale, size_t locale_max) {
     CFArrayRef languages = CFLocaleCopyPreferredLanguages();
     if (languages) {
         if (CFArrayGetCount(languages) > 0) {
-            CFStringRef language = CFArrayGetValueAtIndex(languages, 0);
+            CFStringRef language = (CFStringRef)CFArrayGetValueAtIndex(languages, 0);
             if (language) {
                 CFIndex length = CFStringGetLength(language);
                 if (length > (CFIndex)locale_max - 1) {

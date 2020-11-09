@@ -34,6 +34,9 @@ static void test_basic(void) {
 
 #if defined(__EMSCRIPTEN__)
 EMSCRIPTEN_KEEPALIVE
+#ifdef __cplusplus
+     extern "C"
+#endif
 #else
 static
 #endif
