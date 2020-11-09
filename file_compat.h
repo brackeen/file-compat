@@ -88,10 +88,10 @@ static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
  
     Windows:            %HOMEPATH%\\AppData\\Roaming\\<app_id>\\
     Linux:              ~/.local/share/<app_id>/
+    Emscripten:         /home/web_user/.local/share/<app_id>/
     macOS (executable): ~/Library/Application Support/<app_id>/
     macOS (bundled):    ~/Library/Application Support/<bundle_id>/
     macOS (sandboxed):  ~/Library/Containers/<bundle_id>/Data/Library/Application Support/
-    Emscripten:         /<app_id>/
     iOS, Android:       Local path determined by the system (not using app_id).
 
     The path will be created if it does not exist.
@@ -157,6 +157,7 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #elif defined(__EMSCRIPTEN__)
 #  include <emscripten/emscripten.h>
 #  include <string.h>
+#  include <stdlib.h> // getenv
 #  include <sys/stat.h> // mkdir
 #elif defined(__ANDROID__)
 #  include <android/asset_manager.h>
@@ -272,7 +273,7 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
         path[0] = 0;
         return -1;
     }
-#elif defined(__linux__) && !defined(__ANDROID__)
+#elif defined(__EMSCRIPTEN__) || (defined(__linux__) && !defined(__ANDROID__))
     const char *home_path = getenv("XDG_DATA_HOME");
     int result = -1;
     if (home_path && *home_path) {
@@ -297,14 +298,6 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
             }
             *ch = '/';
         }
-    }
-    return 0;
-#elif defined(__EMSCRIPTEN__)
-    int result = snprintf(path, path_max, "/%s/", app_id);
-    if (result <= 0 || (size_t)result >= path_max ||
-        (mkdir(path, 0700) != 0 && errno != EEXIST)) {
-        path[0] = 0;
-        return -1;
     }
     return 0;
 #elif defined(__ANDROID__)
