@@ -9,7 +9,7 @@ macOS:
 clang -framework Foundation -Weverything -I .. main.c && ./a.out
 
 Emscripten:
-emcc -Weverything -I .. main.c -o main.html && emrun main.html
+emcc -lidbfs.js -I .. main.c -o main.html && emrun main.html
 
 */
 #if defined(__ANDROID__)
@@ -19,7 +19,7 @@ static void *androidActivity;
 
 #include "file_compat.h"
 
-int main(void) {
+static void test_basic(void) {
     char locale[128];
     fc_locale(locale, sizeof(locale));
     printf("Locale (full):  \"%s\"\n", locale);
@@ -30,16 +30,22 @@ int main(void) {
     char path[PATH_MAX];
     fc_resdir(path, PATH_MAX);
     printf("Resources dir: \"%s\"\n", path);
+}
 
-    if (fc_datadir("FileCompatTestApp", path, PATH_MAX)) {
-        printf("Error: Couldn't get data dir\n");
-        return -1;
-    }
-    printf("Data dir: \"%s\"\n", path);
+#if defined(__EMSCRIPTEN__)
+EMSCRIPTEN_KEEPALIVE
+#else
+static
+#endif
+int test_datadir(const char *datadir_path) {
+    char path[PATH_MAX];
+    strcpy(path, datadir_path);
+    strcat(path, "count.txt");
+
+    printf("Data dir: \"%s\"\n", datadir_path);
 
     // Read existing count
     int count = 0;
-    strcat(path, "count.txt");
     FILE *file = fopen(path, "r");
     if (file) {
         if (fscanf(file, "%i", &count) != 1) {
@@ -78,7 +84,41 @@ int main(void) {
         return -1;
     }
 
+#if defined(__EMSCRIPTEN__)
+    // Persist contents of file
+    EM_ASM(
+	    FS.syncfs(function (err) {
+            assert(!err);
+	    });
+    );
+#endif
+
     return 0;
+}
+
+int main(void) {
+    test_basic();
+
+    static char path[PATH_MAX];
+    if (fc_datadir("FileCompatTestApp", path, PATH_MAX)) {
+        printf("Error: Couldn't get data dir\n");
+        return -1;
+    }
+
+#if !defined(__EMSCRIPTEN__)
+    return test_datadir(path);
+#else
+    // Load contents of the path into memory
+    EM_ASM({
+        var path = UTF8ToString($0);
+        FS.mount(IDBFS, {}, path);
+        FS.syncfs(true, function (err) {
+            assert(!err);
+            _test_datadir($0);
+        });
+    }, path);
+    return 0;
+#endif
 }
 
 #if defined(__ANDROID__)
