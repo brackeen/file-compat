@@ -19,9 +19,9 @@ These added functions work on Windows, Linux, macOS, iOS, Android, and Emscripte
 
 | Function     | Description
 |--------------|-----------------------------------------------------------------------------------
-| `fc_resdir`  | Gets the path to the current executable's directory (Windows, Linux) or its resources directory (macOS, iOS)
 | `fc_locale`  | Gets the user's preferred language (For example, "en-US")
-
+| `fc_resdir`  | Gets the current executable's directory (Windows, Linux) or its resources directory (macOS, iOS)
+| `fc_datadir` | Gets the current executable's data directory, useful for saving preferences.
 
 ## Usage
 To use, include `file_compat.h` and use `fopen`, `printf`, etc. like normal.
