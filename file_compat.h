@@ -38,10 +38,10 @@
 
     | Function     | Description
     |--------------|--------------------------------------------------------------------------------
-    | `fc_resdir`  | Gets the path to the current executable's resources directory.
-    | `fc_datadir` | Gets the path to save app data (not implemented on Emscripten).
     | `fc_locale`  | Gets the user's preferred language (For example, "en-US").
-
+    | `fc_resdir`  | Gets the current executable's resources directory.
+    | `fc_datadir` | Gets the current executable's data directory, useful for saving preferences.
+    
     ## Usage:
 
     For Android, define `FILE_COMPAT_ANDROID_ACTIVITY` to be a reference to an `ANativeActivity`
@@ -82,7 +82,9 @@
 static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
 /**
-    Gets the path to the directory to save data.
+    Gets the path to the current executable's data directory. 
+    
+    The data directory is writable and unique to the executable. It is useful for saving preferences.
 
     The path will be an expanded path with a trailing slash, and look something like this:
  
