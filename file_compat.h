@@ -493,43 +493,66 @@ static int fc_locale(char *locale, size_t locale_max) {
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
     if (activity) {
         // getResources().getConfiguration().locale.toString()
+#ifdef __cplusplus
+        JNIEnv *jniEnv = _fc_jnienv(activity->vm);
+        if (jniEnv->ExceptionCheck()) {
+            jniEnv->ExceptionClear();
+        }
+
+        if (jniEnv->PushLocalFrame(16) == JNI_OK) {
+            jclass activityClass = jniEnv->GetObjectClass(activity->clazz);
+            jmethodID getResourcesMethod = jniEnv->GetMethodID(activityClass,
+                    "getResources", "()Landroid/content/res/Resources;");
+            jobject resources = jniEnv->CallObjectMethod(activity->clazz, getResourcesMethod);
+            jclass resourcesClass = jniEnv->GetObjectClass(resources);
+            jmethodID getConfigurationMethod = jniEnv->GetMethodID(resourcesClass,
+                    "getConfiguration", "()Landroid/content/res/Configuration;");
+            jobject configuration = jniEnv->CallObjectMethod(resources, getConfigurationMethod);
+            jclass configurationClass = jniEnv->GetObjectClass(configuration);
+            jfieldID localeField = jniEnv->GetFieldID(configurationClass, "locale", "Ljava/util/Locale;");
+            jobject localeObject = jniEnv->GetObjectField(configuration, localeField);
+            jclass localeClass = jniEnv->GetObjectClass(localeObject);
+            jmethodID toStringMethod = jniEnv->GetMethodID(localeClass, "toString", "()Ljava/lang/String;");
+            jstring valueString = (jstring)jniEnv->CallObjectMethod(localeObject, toStringMethod);
+
+            const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
+            if (nativeString) {
+                result = 0;
+                strncpy(locale, nativeString, locale_max);
+                locale[locale_max - 1] = 0;
+                jniEnv->ReleaseStringUTFChars(valueString, nativeString);
+            }
+            if (jniEnv->ExceptionCheck()) {
+                jniEnv->ExceptionClear();
+            }
+            jniEnv->PopLocalFrame(NULL);
+        }
+    }
+#else
         JNIEnv *jniEnv = _fc_jnienv(activity->vm);
         if ((*jniEnv)->ExceptionCheck(jniEnv)) {
             (*jniEnv)->ExceptionClear(jniEnv);
         }
 
         if ((*jniEnv)->PushLocalFrame(jniEnv, 16) == JNI_OK) {
-#define _JNI_CHECK(x) if (!(x) || (*jniEnv)->ExceptionCheck(jniEnv)) goto cleanup
             jclass activityClass = (*jniEnv)->GetObjectClass(jniEnv, activity->clazz);
-            _JNI_CHECK(activityClass);
             jmethodID getResourcesMethod = (*jniEnv)->GetMethodID(jniEnv, activityClass,
                 "getResources", "()Landroid/content/res/Resources;");
-            _JNI_CHECK(getResourcesMethod);
             jobject resources = (*jniEnv)->CallObjectMethod(jniEnv, activity->clazz,
                 getResourcesMethod);
-            _JNI_CHECK(resources);
             jclass resourcesClass = (*jniEnv)->GetObjectClass(jniEnv, resources);
-            _JNI_CHECK(resourcesClass);
             jmethodID getConfigurationMethod = (*jniEnv)->GetMethodID(jniEnv, resourcesClass,
                 "getConfiguration", "()Landroid/content/res/Configuration;");
-            _JNI_CHECK(getConfigurationMethod);
             jobject configuration = (*jniEnv)->CallObjectMethod(jniEnv, resources,
                 getConfigurationMethod);
-            _JNI_CHECK(configuration);
             jclass configurationClass = (*jniEnv)->GetObjectClass(jniEnv, configuration);
-            _JNI_CHECK(configurationClass);
             jfieldID localeField = (*jniEnv)->GetFieldID(jniEnv, configurationClass, "locale",
                 "Ljava/util/Locale;");
-            _JNI_CHECK(localeField);
             jobject localeObject = (*jniEnv)->GetObjectField(jniEnv, configuration, localeField);
-            _JNI_CHECK(localeObject);
             jclass localeClass = (*jniEnv)->GetObjectClass(jniEnv, localeObject);
-            _JNI_CHECK(localeClass);
             jmethodID toStringMethod = (*jniEnv)->GetMethodID(jniEnv, localeClass, "toString",
                 "()Ljava/lang/String;");
-            _JNI_CHECK(toStringMethod);
             jstring valueString = (*jniEnv)->CallObjectMethod(jniEnv, localeObject, toStringMethod);
-            _JNI_CHECK(valueString);
 
             const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, 0);
             if (nativeString) {
@@ -538,14 +561,13 @@ static int fc_locale(char *locale, size_t locale_max) {
                 locale[locale_max - 1] = 0;
                 (*jniEnv)->ReleaseStringUTFChars(jniEnv, valueString, nativeString);
             }
-cleanup:
-#undef _JNI_CHECK
             if ((*jniEnv)->ExceptionCheck(jniEnv)) {
                 (*jniEnv)->ExceptionClear(jniEnv);
             }
             (*jniEnv)->PopLocalFrame(jniEnv, NULL);
         }
     }
+#endif
 #else
 #error Unsupported platform
 #endif
@@ -641,7 +663,11 @@ static pthread_once_t _fc_jnienv_key_once = PTHREAD_ONCE_INIT;
 static void _fc_jnienv_detach(void *value) {
     if (value) {
         JavaVM *vm = (JavaVM *)value;
+#ifdef __cplusplus
+        vm->DetachCurrentThread();
+#else
         (*vm)->DetachCurrentThread(vm);
+#endif
     }
 }
 
@@ -651,11 +677,17 @@ static void _fc_create_jnienv_key() {
 
 static JNIEnv *_fc_jnienv(JavaVM *vm) {
     JNIEnv *jniEnv = NULL;
-    if ((*vm)->GetEnv(vm, (void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK) {
-        if ((*vm)->AttachCurrentThread(vm, &jniEnv, NULL) == JNI_OK) {
-            pthread_once(&_fc_jnienv_key_once, _fc_create_jnienv_key);
-            pthread_setspecific(_fc_jnienv_key, vm);
-        }
+    int setThreadLocal = 0;
+#ifdef __cplusplus
+    setThreadLocal = (vm->GetEnv((void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
+            vm->AttachCurrentThread(&jniEnv, NULL) == JNI_OK);
+#else
+    setThreadLocal =  ((*vm)->GetEnv(vm, (void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
+            (*vm)->AttachCurrentThread(vm, &jniEnv, NULL) == JNI_OK);
+#endif
+    if (setThreadLocal) {
+        pthread_once(&_fc_jnienv_key_once, _fc_create_jnienv_key);
+        pthread_setspecific(_fc_jnienv_key, vm);
     }
     return jniEnv;
 }
