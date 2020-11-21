@@ -310,6 +310,7 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
     }
     return 0;
 #elif defined(__ANDROID__)
+    (void)app_id;
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
     if (!activity || !activity->internalDataPath) {
         path[0] = 0;
@@ -421,6 +422,8 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
             }
         }
     }
+#else
+    (void)app_id;
 #endif
 
 fc_datadir_fail:
