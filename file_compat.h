@@ -256,7 +256,12 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
     wchar_t *wpath = NULL;
     size_t count = 0; // Output count including NULL
     size_t app_id_length = strlen(app_id);
-    int success = (SUCCEEDED(SHGetKnownFolderPath(&FOLDERID_RoamingAppData, 0, NULL, &wpath)) &&
+#ifdef __cplusplus
+    REFKNOWNFOLDERID app_data_folder_id = FOLDERID_RoamingAppData;
+#else
+    REFKNOWNFOLDERID app_data_folder_id = &FOLDERID_RoamingAppData;
+#endif
+    int success = (SUCCEEDED(SHGetKnownFolderPath(app_data_folder_id, 0, NULL, &wpath)) &&
                    wcstombs_s(&count, path, path_max, wpath, path_max - 1) == 0 &&
                    count > 1 && count + app_id_length + 2 <= path_max);
     CoTaskMemFree(wpath);
