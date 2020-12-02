@@ -90,9 +90,9 @@ int test_datadir(const char *datadir_path) {
 #if defined(__EMSCRIPTEN__)
     // Persist contents of file
     EM_ASM(
-	    FS.syncfs(function (err) {
+        FS.syncfs(function (err) {
             assert(!err);
-	    });
+        });
     );
 #endif
 
