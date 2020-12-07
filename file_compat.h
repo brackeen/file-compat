@@ -168,6 +168,9 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <string.h>
 #  include <stdlib.h> // getenv
 #  include <sys/stat.h> // mkdir
+#  if !defined(PATH_MAX)
+#    define PATH_MAX 4096
+#  endif
 #elif defined(__ANDROID__)
 #  include <android/asset_manager.h>
 #  include <android/log.h>
