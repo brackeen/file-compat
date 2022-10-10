@@ -98,6 +98,9 @@ static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
     The path will be created if it does not exist.
 
+    On Unix-like platforms, if a subpath to this path is needed, it should be created with
+    mode `0700` (octal).
+
     On Emscripten, to persist data, the path has to be mounted and synchronized to an IDBFS
     instance. Otherwise, the files created only exist in memory.
 
