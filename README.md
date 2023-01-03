@@ -7,11 +7,11 @@ These functions are redefined so that they work as expected on Windows and Andro
 
 | Function            | Windows                      | Android
 |---------------------|------------------------------|----------------------------------------------
-| `printf`            | Uses `OutputDebugString`*    | Uses `__android_log_print`
+| `printf`            | Uses `OutputDebugString`     | Uses `__android_log_print`
 | `fopen`             | Uses `fopen_s`               | Uses `AAssetManager_open` if read mode
 | `fclose`            | Adds `NULL` check            | No change
 
-**`OutputDebugString` is only used if the debugger is present and no console is allocated. Otherwise uses `printf`.*
+*Note: `OutputDebugString` is only used if the debugger is present and no console is allocated. Otherwise uses `printf`.*
 
 
 ## Added functions

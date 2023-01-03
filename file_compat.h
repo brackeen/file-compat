@@ -8,12 +8,12 @@
     ## Redefined Functions (Windows, Android):
 
     | Function            | Windows                      | Android
-    |---------------------|------------------------------|-----------------------------------------
-    | `printf`            | Uses `OutputDebugString`*    | Uses `__android_log_print`
+    |---------------------|------------------------------|------------------------------------------
+    | `printf`            | Uses `OutputDebugString`     | Uses `__android_log_print`
     | `fopen`             | Uses `fopen_s`               | Uses `AAssetManager_open` if read mode
     | `fclose`            | Adds `NULL` check            | No change
 
-    *`OutputDebugString` is only used if the debugger is present and no console is allocated.
+    Note: `OutputDebugString` is only used if the debugger is present and no console is allocated.
     Otherwise uses `printf`.
 
     ## Added Functions (Windows, Linux, macOS, iOS, Android, Emscripten):
@@ -42,70 +42,73 @@
 #  define FC_DIRECTORY_SEPARATOR '/'
 #endif
 
-#if defined(__GNUC__)
-#  define FC_UNUSED __attribute__ ((unused))
-#else
-#  define FC_UNUSED
-#endif
+/// Gets the path to the current executable's resources directory.
+/// The path will have a trailing slash (or backslash on Windows).
+///
+/// The returned path is:
+///   * Windows:            The path to the executable's directory.
+///   * Linux:              The path to the executable's directory.
+///   * macOS (executable): The path to the executable's directory.
+///   * macOS (bundled):    The path to the bundle's resources.
+///   * iOS:                The path to the bundle's resources.
+///   * Android:            An empty string.
+///   * Emscripten          An empty string.
+///
+/// - Parameters:
+///   - path: The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
+///           including the trailing 0. If failure occurs, the path is set to an empty string.
+///   - path_max: The length of the buffer. Should be `PATH_MAX`.
+///
+/// - Returns: 0 on success, -1 on failure.
+static int fc_resdir(char *path, size_t path_max);
 
-/**
-    Gets the path to the current executable's resources directory. On macOS/iOS, this is the path to
-    the bundle's resources. On Windows and Linux, this is a path to the executable's directory.
-    On Android and Emscripten, this is an empty string.
+/// Gets the path to the current executable's data directory. It is useful for saving preferences.
+/// The path will have a trailing slash (or backslash on Windows).
+///
+/// The data directory is writable and unique to the executable.
+///
+/// The returned path is:
+///  * Windows:             `%HOMEPATH%\\AppData\\Roaming\\<app_id>\\`
+///  * Linux:               `~/.local/share/<app_id>/`
+///  * macOS (executable):  `~/Library/Application Support/<app_id>/`
+///  * macOS (bundled):     `~/Library/Application Support/<bundle_id>/`
+///  * macOS (sandboxed):   `~/Library/Containers/<bundle_id>/Data/Library/Application Support/`
+///  * iOS:                 Local path determined by the system (not using `app_id`).
+///  * Android:             Local path from `internalDataPath` (not using `app_id`).
+///  * Emscripten:          `/home/web_user/.local/share/<app_id>/`
+///
+/// The directory will be created if it does not exist.
+///
+/// On Unix-like platforms, if a subdirectory of this directory is needed, it should be created
+/// with mode `0700` (octal).
+///
+/// On Emscripten, to persist data, the path has to be mounted and synchronized to an IDBFS
+/// instance. Otherwise, the files created only exist in memory.
+///
+/// - Parameters:
+///   - app_id: The application id, like "MyApp".
+///   - path: The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
+///           including the trailing 0. If failure occurs, the path is set to an empty string.
+///   - path_max: The length of the buffer. Should be `PATH_MAX`.
+///
+/// - Returns: 0 on success, -1 on failure.
+static int fc_datadir(const char *app_id, char *path, size_t path_max);
 
-    The path will have a trailing slash (or backslash on Windows), except for the empty strings for
-    Android and Emscripten.
+/// Gets the preferred user language in BCP-47 format.
+///
+/// Valid examples are "en", "en-US", "zh-Hans", and "zh-Hans-HK". Some platforms may return values
+/// in lowercase ("en-us" instead of "en-US").
+///
+/// - Parameters:
+///   - locale: The buffer to fill the locale. No more than `locale_max` bytes are written to the
+///             buffer, including the trailing 0. If failure occurs, the locale is set to an empty
+///             string.
+///   - locale_max: The length of the buffer. This value must be at least 3.
+///
+/// - Returns: 0 on success, -1 on failure.
+static int fc_locale(char *locale, size_t locale_max);
 
-    @param path The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
-    including the trailing 0. If failure occurs, the path is set to an empty string.
-    @param path_max The length of the buffer. Should be `PATH_MAX`.
-    @return 0 on success, -1 on failure.
- */
-static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
-
-/**
-    Gets the path to the current executable's data directory. 
-    
-    The data directory is writable and unique to the executable. It is useful for saving preferences.
-
-    The path will be an expanded path with a trailing slash, and look something like this:
- 
-    Windows:            %HOMEPATH%\\AppData\\Roaming\\<app_id>\\
-    Linux:              ~/.local/share/<app_id>/
-    Emscripten:         /home/web_user/.local/share/<app_id>/
-    macOS (executable): ~/Library/Application Support/<app_id>/
-    macOS (bundled):    ~/Library/Application Support/<bundle_id>/
-    macOS (sandboxed):  ~/Library/Containers/<bundle_id>/Data/Library/Application Support/
-    iOS, Android:       Local path determined by the system (not using app_id).
-
-    The path will be created if it does not exist.
-
-    On Unix-like platforms, if a subpath to this path is needed, it should be created with
-    mode `0700` (octal).
-
-    On Emscripten, to persist data, the path has to be mounted and synchronized to an IDBFS
-    instance. Otherwise, the files created only exist in memory.
-
-    @param app_id The application id, like "MyApp".
-    @param path The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
-    including the trailing 0. If failure occurs, the path is set to an empty string.
-    @param path_max The length of the buffer. Should be `PATH_MAX`.
-    @return 0 on success, -1 on failure.
-
- */
-static int fc_datadir(const char *app_id, char *path, size_t path_max) FC_UNUSED;
-
-/**
-    Gets the preferred user language in BCP-47 format. Valid examples are "en", "en-US",
-    "zh-Hans", and "zh-Hans-HK". Some platforms may return values in lowercase ("en-us" instead of
-    "en-US").
-
-    @param locale The buffer to fill the locale. No more than `locale_max` bytes are written to the
-    buffer, including the trailing 0. If failure occurs, the locale is set to an empty string.
-    @param locale_max The length of the buffer. This value must be at least 3.
-    @return 0 on success, -1 on failure.
-*/
-static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
+// MARK: - Implementation
 
 #if defined(_WIN32)
 #  if !defined(WIN32_LEAN_AND_MEAN)
@@ -234,7 +237,8 @@ static int fc_resdir(char *path, size_t path_max) {
 
 #if defined(__APPLE__)
 
-// See NSSearchPathDirectory for possible searchPathDirectory values
+/// *Apple only:* Gets a path using `NSSearchPathForDirectoriesInDomains`
+/// - Parameter searchPathDirectory: A `NSSearchPathDirectory`.
 static int fc__appledir(NSUInteger searchPathDirectory,
                         const char *app_id, char *path, size_t path_max) {
 #ifdef __cplusplus
@@ -349,19 +353,25 @@ fc_datadir_fail:
 
 #endif // __APPLE__
 
-#if defined(__EMSCRIPTEN__) || (defined(__linux__) && !defined(__ANDROID__))
+#if defined(__unix__) && !defined(__ANDROID__)
 
-// Returns either "$xdg_env_var/app_id" or "$HOME/xgd_default_path/app_id"
-static int fc__xdgdir(const char *xdg_env_var, const char *xgd_default_path,
-                      const char *app_id, char *path, size_t path_max) {
+/// *Linux only:* Gets a path from an environment variable, and appends `app_id` to it.
+/// If the environment variable is not found, the `default_path` is used.
+///
+/// If `env_var` is available, the resulting path is `getenv(env_var)/app_id/`.
+/// Otherwise, the resulting path is `getenv("HOME")/default_path/app_id/`.
+///
+/// Example: `fc__unixdir("XDG_DATA_HOME", ".local/share", "MyApp", path, path_max);`
+static int fc__unixdir(const char *env_var, const char *default_path,
+                       const char *app_id, char *path, size_t path_max) {
     int result = -1;
-    const char *env_path = getenv(xdg_env_var);
+    const char *env_path = getenv(env_var);
     if (env_path && *env_path) {
         result = snprintf(path, path_max, "%s/%s/", env_path, app_id);
     } else {
         const char *home_path = getenv("HOME");
         if (home_path && *home_path) {
-            result = snprintf(path, path_max, "%s/%s/%s/", home_path, xgd_default_path, app_id);
+            result = snprintf(path, path_max, "%s/%s/%s/", home_path, default_path, app_id);
         }
     }
     if (result <= 0 || (size_t)result >= path_max) {
@@ -382,10 +392,11 @@ static int fc__xdgdir(const char *xdg_env_var, const char *xgd_default_path,
     return 0;
 }
 
-#endif // __linux__
+#endif // __unix__
 
 #if defined(_WIN32)
 
+/// *Windows only:* Gets a path using `SHGetKnownFolderPath`, and appends `app_id` to it.
 static int fc__win32dir(REFKNOWNFOLDERID folder_id,
                         const char *app_id, char *path, size_t path_max) {
     wchar_t *wpath = NULL;
@@ -428,8 +439,8 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #else
     return fc__win32dir(&FOLDERID_RoamingAppData, app_id, path, path_max);
 #endif
-#elif defined(__EMSCRIPTEN__) || (defined(__linux__) && !defined(__ANDROID__))
-    return fc__xdgdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
+#elif defined(__unix__) && !defined(__ANDROID__)
+    return fc__unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
 #elif defined(__ANDROID__)
     (void)app_id;
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
@@ -614,7 +625,7 @@ static int fc_locale(char *locale, size_t locale_max) {
     return result;
 }
 
-// MARK: Windows
+// MARK: - Windows
 
 #if defined(_WIN32)
 
@@ -665,7 +676,7 @@ static int fc__printf(const char *format, ...) {
 
 #endif // _WIN32
 
-// MARK: Android
+// MARK: - Android
 
 #if defined(__ANDROID__)
 
