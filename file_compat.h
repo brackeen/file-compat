@@ -432,6 +432,75 @@ static int fc__win32dir(REFKNOWNFOLDERID folder_id,
 
 #endif // _WIN32
 
+#if defined(__ANDROID__)
+
+/// *Android Only:* Gets a path from a `Context` method like `getFilesDir` or `getCacheDir`.
+static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
+    ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
+    if (!activity) {
+        path[0] = 0;
+        return -1;
+    }
+    int result = -1;
+
+#ifdef __cplusplus
+    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    if (jniEnv->ExceptionCheck()) {
+        jniEnv->ExceptionClear();
+    }
+
+    if (jniEnv->PushLocalFrame(16) == JNI_OK) {
+        jclass activityClass = jniEnv->GetObjectClass(activity->clazz);
+        jmethodID getDirMethod = jniEnv->GetMethodID(activityClass, methodName, "()Ljava/io/File;");
+        jobject file = jniEnv->CallObjectMethod(activity->clazz, getDirMethod);
+        jclass fileClass = jniEnv->FindClass("java/io/File");
+        jmethodID getAbsolutePathMethod = jniEnv->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
+        jstring valueString = (jstring)jniEnv->CallObjectMethod(file, getAbsolutePathMethod);
+
+        const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
+        if (nativeString) {
+            result = 0;
+            snprintf(path, path_max, "%s/", nativeString);
+            jniEnv->ReleaseStringUTFChars(valueString, nativeString);
+        }
+        if (jniEnv->ExceptionCheck()) {
+            jniEnv->ExceptionClear();
+        }
+        jniEnv->PopLocalFrame(NULL);
+    }
+#else
+    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    if ((*jniEnv)->ExceptionCheck(jniEnv)) {
+        (*jniEnv)->ExceptionClear(jniEnv);
+    }
+    if ((*jniEnv)->PushLocalFrame(jniEnv, 16) == JNI_OK) {
+        jclass activityClass = (*jniEnv)->GetObjectClass(jniEnv, activity->clazz);
+        jmethodID getDirMethod = (*jniEnv)->GetMethodID(jniEnv, activityClass, methodName, "()Ljava/io/File;");
+        jobject file = (*jniEnv)->CallObjectMethod(jniEnv, activity->clazz, getDirMethod);
+        jclass fileClass = (*jniEnv)->FindClass(jniEnv, "java/io/File");
+        jmethodID getAbsolutePathMethod = (*jniEnv)->GetMethodID(jniEnv, fileClass, "getAbsolutePath", "()Ljava/lang/String;");
+        jstring valueString = (jstring)(*jniEnv)->CallObjectMethod(jniEnv, file, getAbsolutePathMethod);
+
+        const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, 0);
+        if (nativeString) {
+            result = 0;
+            snprintf(path, path_max, "%s/", nativeString);
+            (*jniEnv)->ReleaseStringUTFChars(jniEnv, valueString, nativeString);
+        }
+        if ((*jniEnv)->ExceptionCheck(jniEnv)) {
+            (*jniEnv)->ExceptionClear(jniEnv);
+        }
+        (*jniEnv)->PopLocalFrame(jniEnv, NULL);
+    }
+#endif
+    if (result != 0) {
+        path[0] = 0;
+    }
+    return result;
+}
+
+#endif
+
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #if defined(_WIN32)
 #ifdef __cplusplus
@@ -443,24 +512,7 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
     return fc__unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
 #elif defined(__ANDROID__)
     (void)app_id;
-    ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
-    if (!activity || !activity->internalDataPath) {
-        path[0] = 0;
-        return -1;
-    }
-    size_t length = strlen(activity->internalDataPath);
-    if (length < path_max - 1) {
-        strcpy(path, activity->internalDataPath);
-        // Add trailing slash
-        if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
-            path[length] = FC_DIRECTORY_SEPARATOR;
-            path[length + 1] = 0;
-        }
-        return 0;
-    } else {
-        path[0] = 0;
-        return -1;
-    }
+    return fc__androiddir("getFilesDir", path, path_max);
 #elif defined(__APPLE__)
     const NSUInteger NSApplicationSupportDirectory = 14;
     return fc__appledir(NSApplicationSupportDirectory, app_id, path, path_max);
@@ -562,7 +614,6 @@ static int fc_locale(char *locale, size_t locale_max) {
             }
             jniEnv->PopLocalFrame(NULL);
         }
-    }
 #else
         JNIEnv *jniEnv = fc__jnienv(activity->vm);
         if ((*jniEnv)->ExceptionCheck(jniEnv)) {
@@ -601,8 +652,8 @@ static int fc_locale(char *locale, size_t locale_max) {
             }
             (*jniEnv)->PopLocalFrame(jniEnv, NULL);
         }
-    }
 #endif
+    }
 #else
 #error Unsupported platform
 #endif
@@ -717,7 +768,7 @@ static JNIEnv *fc__jnienv(JavaVM *vm) {
     setThreadLocal = (vm->GetEnv((void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
             vm->AttachCurrentThread(&jniEnv, NULL) == JNI_OK);
 #else
-    setThreadLocal =  ((*vm)->GetEnv(vm, (void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
+    setThreadLocal = ((*vm)->GetEnv(vm, (void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
             (*vm)->AttachCurrentThread(vm, &jniEnv, NULL) == JNI_OK);
 #endif
     if (setThreadLocal) {
