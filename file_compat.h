@@ -349,6 +349,41 @@ fc_datadir_fail:
 
 #endif // __APPLE__
 
+#if defined(__EMSCRIPTEN__) || (defined(__linux__) && !defined(__ANDROID__))
+
+// Returns either "$xdg_env_var/app_id" or "$HOME/xgd_default_path/app_id"
+static int fc__xdgdir(const char *xdg_env_var, const char *xgd_default_path,
+                      const char *app_id, char *path, size_t path_max) {
+    int result = -1;
+    const char *env_path = getenv(xdg_env_var);
+    if (env_path && *env_path) {
+        result = snprintf(path, path_max, "%s/%s/", env_path, app_id);
+    } else {
+        const char *home_path = getenv("HOME");
+        if (home_path && *home_path) {
+            result = snprintf(path, path_max, "%s/%s/%s/", home_path, xgd_default_path, app_id);
+        }
+    }
+    if (result <= 0 || (size_t)result >= path_max) {
+        path[0] = 0;
+        return -1;
+    }
+    char *ch = path;
+    while (*(++ch)) {
+        if (*ch == '/') {
+            *ch = 0;
+            if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+                path[0] = 0;
+                return -1;
+            }
+            *ch = '/';
+        }
+    }
+    return 0;
+}
+
+#endif // __linux__
+
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #if defined(_WIN32)
     wchar_t *wpath = NULL;
@@ -386,32 +421,7 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
         return -1;
     }
 #elif defined(__EMSCRIPTEN__) || (defined(__linux__) && !defined(__ANDROID__))
-    const char *home_path = getenv("XDG_DATA_HOME");
-    int result = -1;
-    if (home_path && *home_path) {
-        result = snprintf(path, path_max, "%s/%s/", home_path, app_id);
-    } else {
-        home_path = getenv("HOME");
-        if (home_path && *home_path) {
-            result = snprintf(path, path_max, "%s/.local/share/%s/", home_path, app_id);
-        }
-    }
-    if (result <= 0 || (size_t)result >= path_max) {
-        path[0] = 0;
-        return -1;
-    }
-    char *ch = path;
-    while (*(++ch)) {
-        if (*ch == '/') {
-            *ch = 0;
-            if (mkdir(path, 0700) != 0 && errno != EEXIST) {
-                path[0] = 0;
-                return -1;
-            }
-            *ch = '/';
-        }
-    }
-    return 0;
+    return fc__xdgdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
 #elif defined(__ANDROID__)
     (void)app_id;
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
