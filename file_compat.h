@@ -239,6 +239,114 @@ static int fc_resdir(char *path, size_t path_max) {
 #endif
 }
 
+#if defined(__APPLE__)
+
+// See NSSearchPathDirectory for possible searchPathDirectory values
+static int fc__appledir(NSUInteger searchPathDirectory, const char *app_id, char *path, size_t path_max) {
+    int result = -1;
+    const NSUInteger NSUserDomainMask = 1;
+
+#if TARGET_OS_OSX
+    CFBundleRef bundle = NULL;
+    int bundle_id_appended = 0;
+#endif
+
+    CFStringRef dir = NULL;
+    Boolean success = NO;
+    unsigned long length = 0;
+
+    FC_AUTORELEASEPOOL_BEGIN
+    CFArrayRef array =
+#if __has_feature(objc_arc)
+    (__bridge CFArrayRef)
+#else
+    (CFArrayRef)
+#endif
+    NSSearchPathForDirectoriesInDomains(searchPathDirectory, NSUserDomainMask, TRUE);
+    if (!array || CFArrayGetCount(array) == 0) {
+        goto fc_datadir_fail;
+    }
+    dir = (CFStringRef)CFArrayGetValueAtIndex(array, 0);
+    success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
+    if (!success) {
+        goto fc_datadir_fail;
+    }
+    length = strlen(path);
+    if (length == 0 || length + 1 >= path_max) {
+        goto fc_datadir_fail;
+    }
+    // Add trailing slash
+    if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
+        path[length] = FC_DIRECTORY_SEPARATOR;
+        path[length + 1] = 0;
+        length++;
+    }
+    if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+        goto fc_datadir_fail;
+    }
+    result = 0;
+    
+#if TARGET_OS_OSX
+    bundle = CFBundleGetMainBundle();
+    if (bundle) {
+        CFStringRef bundle_id = CFBundleGetIdentifier(bundle);
+        if (bundle_id) {
+            if (CFStringFind(dir, bundle_id, 0).length != 0) {
+                // macOS sandboxed app
+                bundle_id_appended = 1;
+            } else {
+                // Append bundle_id (macOS bundled, non-sandboxed app)
+                CFIndex bundle_id_length = CFStringGetLength(bundle_id);
+                bundle_id_length = CFStringGetMaximumSizeForEncoding(bundle_id_length,
+                                                                     kCFStringEncodingUTF8);
+                if (bundle_id_length > 0 &&
+                    length + (unsigned long)bundle_id_length + 1 < path_max - 1 &&
+                    CFStringGetCString(bundle_id, path + length, bundle_id_length,
+                                       kCFStringEncodingUTF8)) {
+                    path[length + (unsigned long)bundle_id_length] = FC_DIRECTORY_SEPARATOR;
+                    path[length + (unsigned long)bundle_id_length + 1] = 0;
+                    if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+                        result = -1;
+                        goto fc_datadir_fail;
+                    }
+                    bundle_id_appended = 1;
+                }
+            }
+        }
+    }
+    if (!bundle_id_appended) {
+        // Append app_id (macOS executable)
+        if (!app_id || !*app_id) {
+            result = -1;
+        } else {
+            size_t app_id_length = strlen(app_id);
+            if (length + app_id_length + 1 < path_max - 1) {
+                strcpy(path + length, app_id);
+                path[length + app_id_length] = FC_DIRECTORY_SEPARATOR;
+                path[length + app_id_length + 1] = 0;
+                if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+                    result = -1;
+                    goto fc_datadir_fail;
+                }
+            } else {
+                result = -1;
+            }
+        }
+    }
+#else
+    (void)app_id;
+#endif
+
+fc_datadir_fail:
+    if (result != 0) {
+        path[0] = 0;
+    }
+    FC_AUTORELEASEPOOL_END
+    return result;
+}
+
+#endif // __APPLE__
+
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #if defined(_WIN32)
     wchar_t *wpath = NULL;
@@ -323,108 +431,8 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
         return -1;
     }
 #elif defined(__APPLE__)
-    int result = -1;
     const NSUInteger NSApplicationSupportDirectory = 14;
-    const NSUInteger NSUserDomainMask = 1;
-
-#if TARGET_OS_OSX
-    CFBundleRef bundle = NULL;
-    int bundle_id_appended = 0;
-#endif
-
-    CFStringRef dir = NULL;
-    Boolean success = NO;
-    unsigned long length = 0;
-
-    FC_AUTORELEASEPOOL_BEGIN
-    CFArrayRef array =
-#if __has_feature(objc_arc)
-    (__bridge CFArrayRef)
-#else
-    (CFArrayRef)
-#endif
-    NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
-                                        NSUserDomainMask, TRUE);
-    if (!array || CFArrayGetCount(array) == 0) {
-        goto fc_datadir_fail;
-    }
-    dir = (CFStringRef)CFArrayGetValueAtIndex(array, 0);
-    success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
-    if (!success) {
-        goto fc_datadir_fail;
-    }
-    length = strlen(path);
-    if (length == 0 || length + 1 >= path_max) {
-        goto fc_datadir_fail;
-    }
-    // Add trailing slash
-    if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
-        path[length] = FC_DIRECTORY_SEPARATOR;
-        path[length + 1] = 0;
-        length++;
-    }
-    if (mkdir(path, 0700) != 0 && errno != EEXIST) {
-        goto fc_datadir_fail;
-    }
-    result = 0;
-    
-#if TARGET_OS_OSX
-    bundle = CFBundleGetMainBundle();
-    if (bundle) {
-        CFStringRef bundle_id = CFBundleGetIdentifier(bundle);
-        if (bundle_id) {
-            if (CFStringFind(dir, bundle_id, 0).length != 0) {
-                // macOS sandboxed app
-                bundle_id_appended = 1;
-            } else {
-                // Append bundle_id (macOS bundled, non-sandboxed app)
-                CFIndex bundle_id_length = CFStringGetLength(bundle_id);
-                bundle_id_length = CFStringGetMaximumSizeForEncoding(bundle_id_length,
-                                                                     kCFStringEncodingUTF8);
-                if (bundle_id_length > 0 &&
-                    length + (unsigned long)bundle_id_length + 1 < path_max - 1 &&
-                    CFStringGetCString(bundle_id, path + length, bundle_id_length,
-                                       kCFStringEncodingUTF8)) {
-                    path[length + (unsigned long)bundle_id_length] = FC_DIRECTORY_SEPARATOR;
-                    path[length + (unsigned long)bundle_id_length + 1] = 0;
-                    if (mkdir(path, 0700) != 0 && errno != EEXIST) {
-                        result = -1;
-                        goto fc_datadir_fail;
-                    }
-                    bundle_id_appended = 1;
-                }
-            }
-        }
-    }
-    if (!bundle_id_appended) {
-        // Append app_id (macOS executable)
-        if (!app_id || !*app_id) {
-            result = -1;
-        } else {
-            size_t app_id_length = strlen(app_id);
-            if (length + app_id_length + 1 < path_max - 1) {
-                strcpy(path + length, app_id);
-                path[length + app_id_length] = FC_DIRECTORY_SEPARATOR;
-                path[length + app_id_length + 1] = 0;
-                if (mkdir(path, 0700) != 0 && errno != EEXIST) {
-                    result = -1;
-                    goto fc_datadir_fail;
-                }
-            } else {
-                result = -1;
-            }
-        }
-    }
-#else
-    (void)app_id;
-#endif
-
-fc_datadir_fail:
-    if (result != 0) {
-        path[0] = 0;
-    }
-    FC_AUTORELEASEPOOL_END
-    return result;
+    return fc__appledir(NSApplicationSupportDirectory, app_id, path, path_max);
 #else
 #error Unsupported platform
 #endif
