@@ -237,18 +237,18 @@ static int fc_resdir(char *path, size_t path_max) {
 
 #if defined(__APPLE__)
 
+#ifdef __cplusplus
+extern "C"
+#else
+extern
+#endif
+id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMask,
+                                       BOOL expandTilde);
+
 /// *Apple only:* Gets a path using `NSSearchPathForDirectoriesInDomains`
 /// - Parameter searchPathDirectory: A `NSSearchPathDirectory`.
 static int fc__appledir(NSUInteger searchPathDirectory,
                         const char *app_id, char *path, size_t path_max) {
-#ifdef __cplusplus
-    extern "C"
-#else
-    extern
-#endif
-    id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMask,
-                                           BOOL expandTilde);
-
     const NSUInteger NSUserDomainMask = 1;
     int result = -1;
 
