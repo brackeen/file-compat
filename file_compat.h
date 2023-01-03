@@ -130,13 +130,6 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <objc/message.h>
 #  include <objc/NSObjCRuntime.h>
 #  include <sys/stat.h> // mkdir
-#  ifdef __cplusplus
-     extern "C"
-#  else
-     extern
-#  endif
-     id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMask,
-                                            BOOL expandTilde);
 #  if defined(__OBJC__) && __has_feature(objc_arc)
 #    define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
 #    define FC_AUTORELEASEPOOL_END }
@@ -242,9 +235,18 @@ static int fc_resdir(char *path, size_t path_max) {
 #if defined(__APPLE__)
 
 // See NSSearchPathDirectory for possible searchPathDirectory values
-static int fc__appledir(NSUInteger searchPathDirectory, const char *app_id, char *path, size_t path_max) {
-    int result = -1;
+static int fc__appledir(NSUInteger searchPathDirectory,
+                        const char *app_id, char *path, size_t path_max) {
+#ifdef __cplusplus
+    extern "C"
+#else
+    extern
+#endif
+    id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMask,
+                                           BOOL expandTilde);
+
     const NSUInteger NSUserDomainMask = 1;
+    int result = -1;
 
 #if TARGET_OS_OSX
     CFBundleRef bundle = NULL;
