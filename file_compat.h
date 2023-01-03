@@ -1,23 +1,5 @@
-/*
- file-compat
- https://github.com/brackeen/file-compat
- Copyright (c) 2017-2020 David Brackeen
-
- Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
- associated documentation files (the "Software"), to deal in the Software without restriction,
- including without limitation the rights to use, copy, modify, merge, publish, distribute,
- sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in all copies or
- substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
- NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
- DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
- OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+// file-compat
+// https://github.com/brackeen/file-compat
 
 #ifndef FILE_COMPAT_H
 #define FILE_COMPAT_H
@@ -181,7 +163,7 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <jni.h>
 #  include <pthread.h>
 #  include <string.h>
-static JNIEnv *_fc_jnienv(JavaVM *vm);
+static JNIEnv *fc__jnienv(JavaVM *vm);
 #elif defined(__linux__)
 #  include <locale.h>
 #  include <string.h>
@@ -508,7 +490,7 @@ static int fc_locale(char *locale, size_t locale_max) {
     if (activity) {
         // getResources().getConfiguration().locale.toString()
 #ifdef __cplusplus
-        JNIEnv *jniEnv = _fc_jnienv(activity->vm);
+        JNIEnv *jniEnv = fc__jnienv(activity->vm);
         if (jniEnv->ExceptionCheck()) {
             jniEnv->ExceptionClear();
         }
@@ -543,7 +525,7 @@ static int fc_locale(char *locale, size_t locale_max) {
         }
     }
 #else
-        JNIEnv *jniEnv = _fc_jnienv(activity->vm);
+        JNIEnv *jniEnv = fc__jnienv(activity->vm);
         if ((*jniEnv)->ExceptionCheck(jniEnv)) {
             (*jniEnv)->ExceptionClear(jniEnv);
         }
@@ -608,13 +590,13 @@ static int fc_locale(char *locale, size_t locale_max) {
 
 #if defined(_WIN32)
 
-static inline FILE *_fc_windows_fopen(const char *filename, const char *mode) {
+static inline FILE *fc__windows_fopen(const char *filename, const char *mode) {
     FILE *file = NULL;
     fopen_s(&file, filename, mode);
     return file;
 }
 
-static inline int _fc_windows_fclose(FILE *stream) {
+static inline int fc__windows_fclose(FILE *stream) {
     // The Windows fclose() function will crash if stream is NULL
     if (stream) {
         return fclose(stream);
@@ -623,13 +605,13 @@ static inline int _fc_windows_fclose(FILE *stream) {
     }
 }
 
-#define fopen(filename, mode) _fc_windows_fopen(filename, mode)
-#define fclose(file) _fc_windows_fclose(file)
+#define fopen(filename, mode) fc__windows_fopen(filename, mode)
+#define fclose(file) fc__windows_fclose(file)
 
 #if defined(_DEBUG)
 
 // Outputs to debug window if there is no console and IsDebuggerPresent() returns true.
-static int _fc_printf(const char *format, ...) {
+static int fc__printf(const char *format, ...) {
     int result;
     if (IsDebuggerPresent() && GetStdHandle(STD_OUTPUT_HANDLE) == NULL) {
         char buffer[1024];
@@ -649,7 +631,7 @@ static int _fc_printf(const char *format, ...) {
     return result;
 }
 
-#define printf(format, ...) _fc_printf(format, __VA_ARGS__)
+#define printf(format, ...) fc__printf(format, __VA_ARGS__)
 
 #endif /* _DEBUG */
 
@@ -671,10 +653,10 @@ FILE* funopen(const void* __cookie,
 #error FILE_COMPAT_ANDROID_ACTIVITY must be defined as a reference to an ANativeActivity (or NULL).
 #endif
 
-static pthread_key_t _fc_jnienv_key;
-static pthread_once_t _fc_jnienv_key_once = PTHREAD_ONCE_INIT;
+static pthread_key_t fc__jnienv_key;
+static pthread_once_t fc__jnienv_key_once = PTHREAD_ONCE_INIT;
 
-static void _fc_jnienv_detach(void *value) {
+static void fc__jnienv_detach(void *value) {
     if (value) {
         JavaVM *vm = (JavaVM *)value;
 #ifdef __cplusplus
@@ -685,11 +667,11 @@ static void _fc_jnienv_detach(void *value) {
     }
 }
 
-static void _fc_create_jnienv_key() {
-    pthread_key_create(&_fc_jnienv_key, _fc_jnienv_detach);
+static void fc__create_jnienv_key() {
+    pthread_key_create(&fc__jnienv_key, fc__jnienv_detach);
 }
 
-static JNIEnv *_fc_jnienv(JavaVM *vm) {
+static JNIEnv *fc__jnienv(JavaVM *vm) {
     JNIEnv *jniEnv = NULL;
     int setThreadLocal = 0;
 #ifdef __cplusplus
@@ -700,17 +682,17 @@ static JNIEnv *_fc_jnienv(JavaVM *vm) {
             (*vm)->AttachCurrentThread(vm, &jniEnv, NULL) == JNI_OK);
 #endif
     if (setThreadLocal) {
-        pthread_once(&_fc_jnienv_key_once, _fc_create_jnienv_key);
-        pthread_setspecific(_fc_jnienv_key, vm);
+        pthread_once(&fc__jnienv_key_once, fc__create_jnienv_key);
+        pthread_setspecific(fc__jnienv_key, vm);
     }
     return jniEnv;
 }
 
-static int _fc_android_read(void *cookie, char *buf, int size) {
+static int fc__android_read(void *cookie, char *buf, int size) {
     return AAsset_read((AAsset *)cookie, buf, (size_t)size);
 }
 
-static int _fc_android_write(void *cookie, const char *buf, int size) {
+static int fc__android_write(void *cookie, const char *buf, int size) {
     (void)cookie;
     (void)buf;
     (void)size;
@@ -718,16 +700,16 @@ static int _fc_android_write(void *cookie, const char *buf, int size) {
     return -1;
 }
 
-static fpos_t _fc_android_seek(void *cookie, fpos_t offset, int whence) {
+static fpos_t fc__android_seek(void *cookie, fpos_t offset, int whence) {
     return AAsset_seek((AAsset *)cookie, offset, whence);
 }
 
-static int _fc_android_close(void *cookie) {
+static int fc__android_close(void *cookie) {
     AAsset_close((AAsset *)cookie);
     return 0;
 }
 
-static FILE *_fc_android_fopen(const char *filename, const char *mode) {
+static FILE *fc__android_fopen(const char *filename, const char *mode) {
     ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
     AAssetManager *assetManager = NULL;
     AAsset *asset = NULL;
@@ -738,15 +720,15 @@ static FILE *_fc_android_fopen(const char *filename, const char *mode) {
         asset = AAssetManager_open(assetManager, filename, AASSET_MODE_UNKNOWN);
     }
     if (asset) {
-        return funopen(asset, _fc_android_read, _fc_android_write, _fc_android_seek,
-                       _fc_android_close);
+        return funopen(asset, fc__android_read, fc__android_write, fc__android_seek,
+                       fc__android_close);
     } else {
         return fopen(filename, mode);
     }
 }
 
 #define printf(...) __android_log_print(ANDROID_LOG_INFO, "stdout", __VA_ARGS__)
-#define fopen(filename, mode) _fc_android_fopen(filename, mode)
+#define fopen(filename, mode) fc__android_fopen(filename, mode)
 
 #endif /* __ANDROID__ */
 
