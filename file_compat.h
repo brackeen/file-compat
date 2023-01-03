@@ -115,12 +115,12 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <Shlobj.h>
 #  pragma comment(lib, "Shell32.lib")
 #  pragma comment(lib, "Ole32.lib")
-#  include <stdlib.h> /* wcstombs_s */
+#  include <stdlib.h> // wcstombs_s
 #  if !defined(PATH_MAX)
 #    define PATH_MAX MAX_PATH
 #  endif
 #else
-#  include <limits.h> /* PATH_MAX */
+#  include <limits.h> // PATH_MAX
 #endif
 #if defined(__APPLE__)
 #  include <TargetConditionals.h>
@@ -384,17 +384,14 @@ static int fc__xdgdir(const char *xdg_env_var, const char *xgd_default_path,
 
 #endif // __linux__
 
-static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #if defined(_WIN32)
+
+static int fc__win32dir(REFKNOWNFOLDERID folder_id,
+                        const char *app_id, char *path, size_t path_max) {
     wchar_t *wpath = NULL;
     size_t count = 0; // Output count including NULL
     size_t app_id_length = strlen(app_id);
-#ifdef __cplusplus
-    REFKNOWNFOLDERID app_data_folder_id = FOLDERID_RoamingAppData;
-#else
-    REFKNOWNFOLDERID app_data_folder_id = &FOLDERID_RoamingAppData;
-#endif
-    int success = (SUCCEEDED(SHGetKnownFolderPath(app_data_folder_id, 0, NULL, &wpath)) &&
+    int success = (SUCCEEDED(SHGetKnownFolderPath(folder_id, 0, NULL, &wpath)) &&
                    wcstombs_s(&count, path, path_max, wpath, path_max - 1) == 0 &&
                    count > 1 && count + app_id_length + 2 <= path_max);
     CoTaskMemFree(wpath);
@@ -420,6 +417,17 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
         path[0] = 0;
         return -1;
     }
+}
+
+#endif // _WIN32
+
+static int fc_datadir(const char *app_id, char *path, size_t path_max) {
+#if defined(_WIN32)
+#ifdef __cplusplus
+    return fc__win32dir(FOLDERID_RoamingAppData, app_id, path, path_max);
+#else
+    return fc__win32dir(&FOLDERID_RoamingAppData, app_id, path, path_max);
+#endif
 #elif defined(__EMSCRIPTEN__) || (defined(__linux__) && !defined(__ANDROID__))
     return fc__xdgdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
 #elif defined(__ANDROID__)
@@ -606,7 +614,7 @@ static int fc_locale(char *locale, size_t locale_max) {
     return result;
 }
 
-/* MARK: Windows */
+// MARK: Windows
 
 #if defined(_WIN32)
 
@@ -653,11 +661,11 @@ static int fc__printf(const char *format, ...) {
 
 #define printf(format, ...) fc__printf(format, __VA_ARGS__)
 
-#endif /* _DEBUG */
+#endif // _DEBUG
 
-#endif /* _WIN32 */
+#endif // _WIN32
 
-/* MARK: Android */
+// MARK: Android
 
 #if defined(__ANDROID__)
 
@@ -667,7 +675,7 @@ FILE* funopen(const void* __cookie,
               int (*__write_fn)(void*, const char*, int),
               fpos_t (*__seek_fn)(void*, fpos_t, int),
               int (*__close_fn)(void*));
-#endif /* _BSD_SOURCE */
+#endif // _BSD_SOURCE
 
 #if !defined(FILE_COMPAT_ANDROID_ACTIVITY)
 #error FILE_COMPAT_ANDROID_ACTIVITY must be defined as a reference to an ANativeActivity (or NULL).
@@ -750,6 +758,6 @@ static FILE *fc__android_fopen(const char *filename, const char *mode) {
 #define printf(...) __android_log_print(ANDROID_LOG_INFO, "stdout", __VA_ARGS__)
 #define fopen(filename, mode) fc__android_fopen(filename, mode)
 
-#endif /* __ANDROID__ */
+#endif // __ANDROID__
 
-#endif /* FILE_COMPAT_H */
+#endif // FILE_COMPAT_H
