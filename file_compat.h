@@ -74,7 +74,7 @@ static int fc_resdir(char *path, size_t path_max);
 ///  * macOS (bundled):     `~/Library/Application Support/<bundle_id>/`
 ///  * macOS (sandboxed):   `~/Library/Containers/<bundle_id>/Data/Library/Application Support/`
 ///  * iOS:                 Local path determined by the system (not using `app_id`).
-///  * Android:             Local path from `internalDataPath` (not using `app_id`).
+///  * Android:             Local path from `getFilesDir` (not using `app_id`).
 ///  * Emscripten:          `/home/web_user/.local/share/<app_id>/`
 ///
 /// The directory will be created if it does not exist.
@@ -93,6 +93,39 @@ static int fc_resdir(char *path, size_t path_max);
 ///
 /// - Returns: 0 on success, -1 on failure.
 static int fc_datadir(const char *app_id, char *path, size_t path_max);
+
+/// Gets the path to the current executable's cache directory.
+/// It is useful for saving downloaded files.
+/// The path will have a trailing slash (or backslash on Windows).
+///
+/// The cache directory is writable and unique to the executable.
+///
+/// The returned path is:
+///  * Windows:             `%HOMEPATH%\\AppData\\Local\\<app_id>\\`
+///  * Linux:               `~/.cache/<app_id>/`
+///  * macOS (executable):  `~/Library/Caches/<app_id>/`
+///  * macOS (bundled):     `~/Library/Caches/<bundle_id>/`
+///  * macOS (sandboxed):   `~/Library/Containers/<bundle_id>/Data/Library/Caches/`
+///  * iOS:                 Local path determined by the system (not using `app_id`).
+///  * Android:             Local path from `getCacheDir` (not using `app_id`).
+///  * Emscripten:          `/home/web_user/.cache/<app_id>/`
+///
+/// The directory will be created if it does not exist.
+///
+/// On Unix-like platforms, if a subdirectory of this directory is needed, it should be created
+/// with mode `0700` (octal).
+///
+/// On Emscripten, to persist data, the path has to be mounted and synchronized to an IDBFS
+/// instance. Otherwise, the files created only exist in memory.
+///
+/// - Parameters:
+///   - app_id: The application id, like "MyApp".
+///   - path: The buffer to fill the path. No more than `path_max` bytes are written to the buffer,
+///           including the trailing 0. If failure occurs, the path is set to an empty string.
+///   - path_max: The length of the buffer. Should be `PATH_MAX`.
+///
+/// - Returns: 0 on success, -1 on failure.
+static int fc_cachedir(const char *app_id, char *path, size_t path_max);
 
 /// Gets the preferred user language in BCP-47 format.
 ///
@@ -516,6 +549,26 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #elif defined(__APPLE__)
     const NSUInteger NSApplicationSupportDirectory = 14;
     return fc__appledir(NSApplicationSupportDirectory, app_id, path, path_max);
+#else
+#error Unsupported platform
+#endif
+}
+
+static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
+#if defined(_WIN32)
+#ifdef __cplusplus
+    return fc__win32dir(FOLDERID_LocalAppData, app_id, path, path_max);
+#else
+    return fc__win32dir(&FOLDERID_LocalAppData, app_id, path, path_max);
+#endif
+#elif defined(__unix__) && !defined(__ANDROID__)
+    return fc__unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
+#elif defined(__ANDROID__)
+    (void)app_id;
+    return fc__androiddir("getCacheDir", path, path_max);
+#elif defined(__APPLE__)
+    const NSUInteger NSCachesDirectory = 13;
+    return fc__appledir(NSCachesDirectory, app_id, path, path_max);
 #else
 #error Unsupported platform
 #endif

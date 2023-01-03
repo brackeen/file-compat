@@ -40,19 +40,19 @@ EMSCRIPTEN_KEEPALIVE
 #else
 static
 #endif
-int test_datadir(const char *datadir_path) {
+int test_writeable_dir(const char *dir_name, const char *datadir_path) {
     char path[PATH_MAX];
     strcpy(path, datadir_path);
     strcat(path, "count.txt");
 
-    printf("Data dir: \"%s\"\n", datadir_path);
+    printf("%s dir: \"%s\"\n", dir_name, datadir_path);
 
     // Read existing count
     int count = 0;
     FILE *file = fopen(path, "r");
     if (file) {
         if (fscanf(file, "%i", &count) != 1) {
-            printf("Error: Couldn't read existing file from data dir\n");
+            printf("Error: Couldn't read existing file\n");
             return -1;
         }
         fclose(file);
@@ -62,7 +62,7 @@ int test_datadir(const char *datadir_path) {
     count++;
     file = fopen(path, "w");
     if (!file) {
-        printf("Error: Couldn't create file in data dir\n");
+        printf("Error: Couldn't create file\n");
         return -1;
     }
     fprintf(file, "%i\n", count);
@@ -72,11 +72,11 @@ int test_datadir(const char *datadir_path) {
     int countCheck = 0;
     file = fopen(path, "r");
     if (!file) {
-        printf("Error: Couldn't open newly created file in data dir\n");
+        printf("Error: Couldn't open newly created file\n");
         return -1;
     }
     if (fscanf(file, "%i", &countCheck) != 1) {
-        printf("Error: Couldn't read newly created file from data dir\n");
+        printf("Error: Couldn't read newly created file\n");
         return -1;
     }
     fclose(file);
@@ -87,39 +87,46 @@ int test_datadir(const char *datadir_path) {
         return -1;
     }
 
-#if defined(__EMSCRIPTEN__)
-    // Persist contents of file
-    EM_ASM(
-        FS.syncfs(function (err) {
-            assert(!err);
-        });
-    );
-#endif
-
     return 0;
 }
 
 int main(void) {
     test_basic();
 
-    static char path[PATH_MAX];
-    if (fc_datadir("FileCompatTestApp", path, PATH_MAX)) {
+    static char data_path[PATH_MAX];
+    static char cache_path[PATH_MAX];
+    if (fc_datadir("FileCompatTestApp", data_path, PATH_MAX)) {
         printf("Error: Couldn't get data dir\n");
+        return -1;
+    }
+    if (fc_cachedir("FileCompatTestApp", cache_path, PATH_MAX)) {
+        printf("Error: Couldn't get cache dir\n");
         return -1;
     }
 
 #if !defined(__EMSCRIPTEN__)
-    return test_datadir(path);
+    int result = 0;
+    result += test_writeable_dir("Data", data_path);
+    result += test_writeable_dir("Cache", cache_path);
+    return result;
 #else
     // Load contents of the path into memory
     EM_ASM({
-        var path = UTF8ToString($0);
-        FS.mount(IDBFS, {}, path);
+        let data_path = UTF8ToString($1);
+        let cache_path = UTF8ToString($3);
+        FS.mount(IDBFS, {}, data_path);
+        FS.mount(IDBFS, {}, cache_path);
         FS.syncfs(true, function (err) {
             assert(!err);
-            _test_datadir($0);
+            // Test writing
+            _test_writeable_dir($0, $1);
+            _test_writeable_dir($2, $3);
+            // Persist contents of files
+            FS.syncfs(function (err) {
+                assert(!err);
+            });
         });
-    }, path);
+    }, "Data", data_path, "Cache", cache_path);
     return 0;
 #endif
 }
