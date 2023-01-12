@@ -42,6 +42,12 @@
 #  define FC_DIRECTORY_SEPARATOR '/'
 #endif
 
+#if defined(__GNUC__)
+#  define FC_UNUSED __attribute__ ((unused))
+#else
+#  define FC_UNUSED
+#endif
+
 /// Gets the path to the current executable's resources directory.
 /// The path will have a trailing slash (or backslash on Windows).
 ///
@@ -60,7 +66,7 @@
 ///   - path_max: The length of the buffer. Should be `PATH_MAX`.
 ///
 /// - Returns: 0 on success, -1 on failure.
-static int fc_resdir(char *path, size_t path_max);
+static int fc_resdir(char *path, size_t path_max) FC_UNUSED;
 
 /// Gets the path to the current executable's data directory. It is useful for saving preferences.
 /// The path will have a trailing slash (or backslash on Windows).
@@ -92,7 +98,7 @@ static int fc_resdir(char *path, size_t path_max);
 ///   - path_max: The length of the buffer. Should be `PATH_MAX`.
 ///
 /// - Returns: 0 on success, -1 on failure.
-static int fc_datadir(const char *app_id, char *path, size_t path_max);
+static int fc_datadir(const char *app_id, char *path, size_t path_max) FC_UNUSED;
 
 /// Gets the path to the current executable's cache directory.
 /// It is useful for saving downloaded files.
@@ -125,7 +131,7 @@ static int fc_datadir(const char *app_id, char *path, size_t path_max);
 ///   - path_max: The length of the buffer. Should be `PATH_MAX`.
 ///
 /// - Returns: 0 on success, -1 on failure.
-static int fc_cachedir(const char *app_id, char *path, size_t path_max);
+static int fc_cachedir(const char *app_id, char *path, size_t path_max) FC_UNUSED;
 
 /// Gets the preferred user language in BCP-47 format.
 ///
@@ -139,7 +145,7 @@ static int fc_cachedir(const char *app_id, char *path, size_t path_max);
 ///   - locale_max: The length of the buffer. This value must be at least 3.
 ///
 /// - Returns: 0 on success, -1 on failure.
-static int fc_locale(char *locale, size_t locale_max);
+static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 
 // MARK: - Implementation
 
