@@ -661,8 +661,9 @@ static int fc__printf(const char *format, ...) {
 static JNIEnv *fc__jnienv(JavaVM *vm);
 
 /// *Android Only:* Gets a path from a `Context` method like `getFilesDir` or `getCacheDir`.
-static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
-    ANativeActivity *activity = FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY);
+static int fc__android_dir(ANativeActivity *activity, const char *method_name,
+                           const char *app_id, char *path, size_t path_max) {
+    (void)app_id;
     if (!activity) {
         path[0] = 0;
         return -1;
@@ -677,7 +678,7 @@ static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
 
     if (jniEnv->PushLocalFrame(16) == JNI_OK) {
         jclass activityClass = jniEnv->GetObjectClass(activity->clazz);
-        jmethodID getDirMethod = jniEnv->GetMethodID(activityClass, methodName, "()Ljava/io/File;");
+        jmethodID getDirMethod = jniEnv->GetMethodID(activityClass, method_name, "()Ljava/io/File;");
         jobject file = jniEnv->CallObjectMethod(activity->clazz, getDirMethod);
         jclass fileClass = jniEnv->FindClass("java/io/File");
         jmethodID getAbsolutePathMethod = jniEnv->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
@@ -701,7 +702,7 @@ static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
     }
     if ((*jniEnv)->PushLocalFrame(jniEnv, 16) == JNI_OK) {
         jclass activityClass = (*jniEnv)->GetObjectClass(jniEnv, activity->clazz);
-        jmethodID getDirMethod = (*jniEnv)->GetMethodID(jniEnv, activityClass, methodName, "()Ljava/io/File;");
+        jmethodID getDirMethod = (*jniEnv)->GetMethodID(jniEnv, activityClass, method_name, "()Ljava/io/File;");
         jobject file = (*jniEnv)->CallObjectMethod(jniEnv, activity->clazz, getDirMethod);
         jclass fileClass = (*jniEnv)->FindClass(jniEnv, "java/io/File");
         jmethodID getAbsolutePathMethod = (*jniEnv)->GetMethodID(jniEnv, fileClass, "getAbsolutePath", "()Ljava/lang/String;");
@@ -725,6 +726,94 @@ static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
     return result;
 }
 
+static int fc__android_locale(ANativeActivity *activity,
+                              char *locale, size_t locale_max) {
+    if (!locale || locale_max < 3 || !activity) {
+        return -1;
+    }
+    int result = -1;
+    // getResources().getConfiguration().locale.toString()
+#ifdef __cplusplus
+    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    if (jniEnv->ExceptionCheck()) {
+        jniEnv->ExceptionClear();
+    }
+
+    if (jniEnv->PushLocalFrame(16) == JNI_OK) {
+        jclass activityClass = jniEnv->GetObjectClass(activity->clazz);
+        jmethodID getResourcesMethod = jniEnv->GetMethodID(activityClass,
+                "getResources", "()Landroid/content/res/Resources;");
+        jobject resources = jniEnv->CallObjectMethod(activity->clazz, getResourcesMethod);
+        jclass resourcesClass = jniEnv->GetObjectClass(resources);
+        jmethodID getConfigurationMethod = jniEnv->GetMethodID(resourcesClass,
+                "getConfiguration", "()Landroid/content/res/Configuration;");
+        jobject configuration = jniEnv->CallObjectMethod(resources, getConfigurationMethod);
+        jclass configurationClass = jniEnv->GetObjectClass(configuration);
+        jfieldID localeField = jniEnv->GetFieldID(configurationClass, "locale", "Ljava/util/Locale;");
+        jobject localeObject = jniEnv->GetObjectField(configuration, localeField);
+        jclass localeClass = jniEnv->GetObjectClass(localeObject);
+        jmethodID toStringMethod = jniEnv->GetMethodID(localeClass, "toString", "()Ljava/lang/String;");
+        jstring valueString = reinterpret_cast<jstring>(jniEnv->CallObjectMethod(localeObject, toStringMethod));
+
+        const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
+        if (nativeString) {
+            result = 0;
+            strncpy(locale, nativeString, locale_max);
+            locale[locale_max - 1] = 0;
+            jniEnv->ReleaseStringUTFChars(valueString, nativeString);
+        }
+        if (jniEnv->ExceptionCheck()) {
+            jniEnv->ExceptionClear();
+        }
+        jniEnv->PopLocalFrame(NULL);
+    }
+#else
+    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    if ((*jniEnv)->ExceptionCheck(jniEnv)) {
+        (*jniEnv)->ExceptionClear(jniEnv);
+    }
+
+    if ((*jniEnv)->PushLocalFrame(jniEnv, 16) == JNI_OK) {
+        jclass activityClass = (*jniEnv)->GetObjectClass(jniEnv, activity->clazz);
+        jmethodID getResourcesMethod = (*jniEnv)->GetMethodID(jniEnv, activityClass,
+            "getResources", "()Landroid/content/res/Resources;");
+        jobject resources = (*jniEnv)->CallObjectMethod(jniEnv, activity->clazz,
+            getResourcesMethod);
+        jclass resourcesClass = (*jniEnv)->GetObjectClass(jniEnv, resources);
+        jmethodID getConfigurationMethod = (*jniEnv)->GetMethodID(jniEnv, resourcesClass,
+            "getConfiguration", "()Landroid/content/res/Configuration;");
+        jobject configuration = (*jniEnv)->CallObjectMethod(jniEnv, resources,
+            getConfigurationMethod);
+        jclass configurationClass = (*jniEnv)->GetObjectClass(jniEnv, configuration);
+        jfieldID localeField = (*jniEnv)->GetFieldID(jniEnv, configurationClass, "locale",
+            "Ljava/util/Locale;");
+        jobject localeObject = (*jniEnv)->GetObjectField(jniEnv, configuration, localeField);
+        jclass localeClass = (*jniEnv)->GetObjectClass(jniEnv, localeObject);
+        jmethodID toStringMethod = (*jniEnv)->GetMethodID(jniEnv, localeClass, "toString",
+            "()Ljava/lang/String;");
+        jstring valueString = (*jniEnv)->CallObjectMethod(jniEnv, localeObject, toStringMethod);
+
+        const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, 0);
+        if (nativeString) {
+            result = 0;
+            strncpy(locale, nativeString, locale_max);
+            locale[locale_max - 1] = 0;
+            (*jniEnv)->ReleaseStringUTFChars(jniEnv, valueString, nativeString);
+        }
+        if ((*jniEnv)->ExceptionCheck(jniEnv)) {
+            (*jniEnv)->ExceptionClear(jniEnv);
+        }
+        (*jniEnv)->PopLocalFrame(jniEnv, NULL);
+    }
+#endif // !defined(__cplusplus)
+    if (result == 0) {
+        fc__locale_clean(locale);
+    } else {
+        locale[0] = 0;
+    }
+    return result;
+}
+
 static int fc_resdir(char *path, size_t path_max) {
     if (!path || path_max == 0) {
         return -1;
@@ -733,104 +822,17 @@ static int fc_resdir(char *path, size_t path_max) {
     return 0;
 }
 
-static int fc_datadir(const char *app_id, char *path, size_t path_max) {
-    (void)app_id;
-    return fc__androiddir("getFilesDir", path, path_max);
-}
+#define fc_datadir(app_id, path, path_max) \
+    fc__android_dir(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
+                    "getFilesDir", (app_id), (path), (path_max))
 
-static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
-    return fc__androiddir("getCacheDir", path, path_max);
-}
+#define fc_cachedir(app_id, path, path_max) \
+    fc__android_dir(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
+                    "getCacheDir", (app_id), (path), (path_max))
 
-static int fc_locale(char *locale, size_t locale_max) {
-    if (!locale || locale_max < 3) {
-        return -1;
-    }
-    int result = -1;
-    ANativeActivity *activity = FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY);
-    if (activity) {
-        // getResources().getConfiguration().locale.toString()
-#ifdef __cplusplus
-        JNIEnv *jniEnv = fc__jnienv(activity->vm);
-        if (jniEnv->ExceptionCheck()) {
-            jniEnv->ExceptionClear();
-        }
-
-        if (jniEnv->PushLocalFrame(16) == JNI_OK) {
-            jclass activityClass = jniEnv->GetObjectClass(activity->clazz);
-            jmethodID getResourcesMethod = jniEnv->GetMethodID(activityClass,
-                    "getResources", "()Landroid/content/res/Resources;");
-            jobject resources = jniEnv->CallObjectMethod(activity->clazz, getResourcesMethod);
-            jclass resourcesClass = jniEnv->GetObjectClass(resources);
-            jmethodID getConfigurationMethod = jniEnv->GetMethodID(resourcesClass,
-                    "getConfiguration", "()Landroid/content/res/Configuration;");
-            jobject configuration = jniEnv->CallObjectMethod(resources, getConfigurationMethod);
-            jclass configurationClass = jniEnv->GetObjectClass(configuration);
-            jfieldID localeField = jniEnv->GetFieldID(configurationClass, "locale", "Ljava/util/Locale;");
-            jobject localeObject = jniEnv->GetObjectField(configuration, localeField);
-            jclass localeClass = jniEnv->GetObjectClass(localeObject);
-            jmethodID toStringMethod = jniEnv->GetMethodID(localeClass, "toString", "()Ljava/lang/String;");
-            jstring valueString = reinterpret_cast<jstring>(jniEnv->CallObjectMethod(localeObject, toStringMethod));
-
-            const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
-            if (nativeString) {
-                result = 0;
-                strncpy(locale, nativeString, locale_max);
-                locale[locale_max - 1] = 0;
-                jniEnv->ReleaseStringUTFChars(valueString, nativeString);
-            }
-            if (jniEnv->ExceptionCheck()) {
-                jniEnv->ExceptionClear();
-            }
-            jniEnv->PopLocalFrame(NULL);
-        }
-#else
-        JNIEnv *jniEnv = fc__jnienv(activity->vm);
-        if ((*jniEnv)->ExceptionCheck(jniEnv)) {
-            (*jniEnv)->ExceptionClear(jniEnv);
-        }
-
-        if ((*jniEnv)->PushLocalFrame(jniEnv, 16) == JNI_OK) {
-            jclass activityClass = (*jniEnv)->GetObjectClass(jniEnv, activity->clazz);
-            jmethodID getResourcesMethod = (*jniEnv)->GetMethodID(jniEnv, activityClass,
-                "getResources", "()Landroid/content/res/Resources;");
-            jobject resources = (*jniEnv)->CallObjectMethod(jniEnv, activity->clazz,
-                getResourcesMethod);
-            jclass resourcesClass = (*jniEnv)->GetObjectClass(jniEnv, resources);
-            jmethodID getConfigurationMethod = (*jniEnv)->GetMethodID(jniEnv, resourcesClass,
-                "getConfiguration", "()Landroid/content/res/Configuration;");
-            jobject configuration = (*jniEnv)->CallObjectMethod(jniEnv, resources,
-                getConfigurationMethod);
-            jclass configurationClass = (*jniEnv)->GetObjectClass(jniEnv, configuration);
-            jfieldID localeField = (*jniEnv)->GetFieldID(jniEnv, configurationClass, "locale",
-                "Ljava/util/Locale;");
-            jobject localeObject = (*jniEnv)->GetObjectField(jniEnv, configuration, localeField);
-            jclass localeClass = (*jniEnv)->GetObjectClass(jniEnv, localeObject);
-            jmethodID toStringMethod = (*jniEnv)->GetMethodID(jniEnv, localeClass, "toString",
-                "()Ljava/lang/String;");
-            jstring valueString = (*jniEnv)->CallObjectMethod(jniEnv, localeObject, toStringMethod);
-
-            const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, 0);
-            if (nativeString) {
-                result = 0;
-                strncpy(locale, nativeString, locale_max);
-                locale[locale_max - 1] = 0;
-                (*jniEnv)->ReleaseStringUTFChars(jniEnv, valueString, nativeString);
-            }
-            if ((*jniEnv)->ExceptionCheck(jniEnv)) {
-                (*jniEnv)->ExceptionClear(jniEnv);
-            }
-            (*jniEnv)->PopLocalFrame(jniEnv, NULL);
-        }
-#endif // !defined(__cplusplus)
-    }
-    if (result == 0) {
-        fc__locale_clean(locale);
-    } else {
-        locale[0] = 0;
-    }
-    return result;
-}
+#define fc_locale(locale, locale_max) \
+    fc__android_locale(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
+                       (locale), (locale_max))
 
 #if !defined(_BSD_SOURCE)
 FILE* funopen(const void* __cookie,
@@ -896,8 +898,7 @@ static int fc__android_close(void *cookie) {
     return 0;
 }
 
-static FILE *fc__android_fopen(const char *filename, const char *mode) {
-    ANativeActivity *activity = FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY);
+static FILE *fc__android_fopen(ANativeActivity *activity, const char *filename, const char *mode) {
     AAssetManager *assetManager = NULL;
     AAsset *asset = NULL;
     if (activity) {
@@ -915,7 +916,8 @@ static FILE *fc__android_fopen(const char *filename, const char *mode) {
 }
 
 #define printf(...) __android_log_print(ANDROID_LOG_INFO, "stdout", __VA_ARGS__)
-#define fopen(filename, mode) fc__android_fopen(filename, mode)
+#define fopen(filename, mode) fc__android_fopen(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
+                                                (filename), (mode))
 
 #endif // defined(__ANDROID__)
 
