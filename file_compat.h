@@ -23,6 +23,7 @@
     | `fc_locale`  | Gets the user's preferred language (For example, "en-US").
     | `fc_resdir`  | Gets the current executable's resources directory.
     | `fc_datadir` | Gets the current executable's data directory, useful for saving preferences.
+    | `fc_cachedir`| Gets the current executable's cache directory, useful for saving downloaded files.
     
     ## Usage:
 
