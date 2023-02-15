@@ -28,10 +28,13 @@
     ## Usage:
 
     For Android, define `FILE_COMPAT_ANDROID_ACTIVITY` to be a reference to an `ANativeActivity`
-    instance or to a function that returns an `ANativeActivity` instance. May be `NULL`.
+    instance or to a function that returns an `ANativeActivity` instance.
 
-        #define FILE_COMPAT_ANDROID_ACTIVITY app->activity
         #include "file_compat.h"
+        #define FILE_COMPAT_ANDROID_ACTIVITY functionThatGetsAndroidActivity()
+
+        ANativeActivity *functionThatGetsAndroidActivity(void);
+
  */
 
 #include <stdio.h>
@@ -655,10 +658,6 @@ static int fc__printf(const char *format, ...) {
 #include <pthread.h>
 #include <string.h>
 
-#if !defined(FILE_COMPAT_ANDROID_ACTIVITY)
-#error FILE_COMPAT_ANDROID_ACTIVITY must be defined as a reference to an ANativeActivity (or NULL).
-#endif
-
 static JNIEnv *fc__jnienv(JavaVM *vm);
 
 /// *Android Only:* Gets a path from a `Context` method like `getFilesDir` or `getCacheDir`.
@@ -823,17 +822,22 @@ static int fc_resdir(char *path, size_t path_max) {
     return 0;
 }
 
+/// For Android, define `FILE_COMPAT_ANDROID_ACTIVITY` to be a reference to an `ANativeActivity`
+/// instance or to a function that returns an `ANativeActivity` instance.
+/// For example:
+///
+///     ANativeActivity *functionThatGetsAndroidActivity(void);
+///     #define FILE_COMPAT_ANDROID_ACTIVITY functionThatGetsAndroidActivity()
+#define fc__android_activity() FILE_COMPAT_ANDROID_ACTIVITY
+
 #define fc_datadir(app_id, path, path_max) \
-    fc__android_dir(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
-                    "getFilesDir", (app_id), (path), (path_max))
+    fc__android_dir(fc__android_activity(), "getFilesDir", (app_id), (path), (path_max))
 
 #define fc_cachedir(app_id, path, path_max) \
-    fc__android_dir(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
-                    "getCacheDir", (app_id), (path), (path_max))
+    fc__android_dir(fc__android_activity(), "getCacheDir", (app_id), (path), (path_max))
 
 #define fc_locale(locale, locale_max) \
-    fc__android_locale(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
-                       (locale), (locale_max))
+    fc__android_locale(fc__android_activity(), (locale), (locale_max))
 
 #if !defined(_BSD_SOURCE)
 FILE* funopen(const void* __cookie,
@@ -917,8 +921,7 @@ static FILE *fc__android_fopen(ANativeActivity *activity, const char *filename, 
 }
 
 #define printf(...) __android_log_print(ANDROID_LOG_INFO, "stdout", __VA_ARGS__)
-#define fopen(filename, mode) fc__android_fopen(FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY), \
-                                                (filename), (mode))
+#define fopen(filename, mode) fc__android_fopen(fc__android_activity(), (filename), (mode))
 
 #endif // defined(__ANDROID__)
 

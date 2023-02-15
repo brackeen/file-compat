@@ -4,13 +4,13 @@
 
 #include <assert.h>
 
-#if defined(__ANDROID__)
-extern void *android_activity;
-#define FILE_COMPAT_ANDROID_ACTIVITY android_activity
-#endif
-
 #include "file_compat.h"
 #include "test_write.h"
+
+#if defined(__ANDROID__)
+extern ANativeActivity *android_activity;
+#define FILE_COMPAT_ANDROID_ACTIVITY android_activity
+#endif
 
 static const char APP_ID[] = "FileCompatTestApp";
 

@@ -13,13 +13,13 @@ emcc -lidbfs.js -I .. main.c test_write.cpp -o main.html && emrun main.html
 
 */
 
-#if defined(__ANDROID__)
-void *android_activity;
-#define FILE_COMPAT_ANDROID_ACTIVITY android_activity
-#endif
-
 #include "file_compat.h"
 #include "test_write.h"
+
+#if defined(__ANDROID__)
+ANativeActivity *android_activity;
+#define FILE_COMPAT_ANDROID_ACTIVITY android_activity
+#endif
 
 static void test_basic(void) {
     char locale[128];
