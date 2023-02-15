@@ -475,7 +475,7 @@ static int fc__win32dir(REFKNOWNFOLDERID folder_id,
 
 /// *Android Only:* Gets a path from a `Context` method like `getFilesDir` or `getCacheDir`.
 static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
-    ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
+    ANativeActivity *activity = (ANativeActivity *)FILE_COMPAT_ANDROID_ACTIVITY;
     if (!activity) {
         path[0] = 0;
         return -1;
@@ -636,7 +636,7 @@ static int fc_locale(char *locale, size_t locale_max) {
         locale[locale_max - 1] = 0;
     }
 #elif defined(__ANDROID__)
-    ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
+    ANativeActivity *activity = (ANativeActivity *)FILE_COMPAT_ANDROID_ACTIVITY;
     if (activity) {
         // getResources().getConfiguration().locale.toString()
 #ifdef __cplusplus
@@ -859,7 +859,7 @@ static int fc__android_close(void *cookie) {
 }
 
 static FILE *fc__android_fopen(const char *filename, const char *mode) {
-    ANativeActivity *activity = FILE_COMPAT_ANDROID_ACTIVITY;
+    ANativeActivity *activity = (ANativeActivity *)FILE_COMPAT_ANDROID_ACTIVITY;
     AAssetManager *assetManager = NULL;
     AAsset *asset = NULL;
     if (activity) {
