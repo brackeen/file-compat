@@ -147,7 +147,11 @@ static int fc_cachedir(const char *app_id, char *path, size_t path_max) FC_UNUSE
 /// - Returns: 0 on success, -1 on failure.
 static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 
-// MARK: - Implementation
+// MARK: - Private
+
+#if !defined(_WIN32)
+#  include <limits.h> // PATH_MAX
+#endif
 
 #ifdef __cplusplus
 #  define FC_STATIC_CAST(value_type) static_cast<value_type>
@@ -157,133 +161,87 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  define FC_REINTERPRET_CAST(value_type) (value_type)
 #endif
 
-#if defined(_WIN32)
-#  if !defined(WIN32_LEAN_AND_MEAN)
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  include <windows.h>
-#  include <Shlobj.h>
-#  pragma comment(lib, "Shell32.lib")
-#  pragma comment(lib, "Ole32.lib")
-#  include <stdlib.h> // wcstombs_s
-#  if !defined(PATH_MAX)
-#    define PATH_MAX MAX_PATH
-#  endif
-#else
-#  include <limits.h> // PATH_MAX
-#endif
-#if defined(__APPLE__)
-#  include <TargetConditionals.h>
-#  include <CoreFoundation/CoreFoundation.h>
-#  include <objc/objc.h>
-#  include <objc/runtime.h>
-#  include <objc/message.h>
-#  include <objc/NSObjCRuntime.h>
-#  include <sys/stat.h> // mkdir
-#  if defined(__OBJC__) && __has_feature(objc_arc)
-#    define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
-#    define FC_AUTORELEASEPOOL_END }
-#  else
-#    define FC_MSG_SEND (FC_REINTERPRET_CAST(id (*)(id, SEL))(objc_msgSend))
-#    define FC_AUTORELEASEPOOL_BEGIN { \
-         id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND(FC_REINTERPRET_CAST(id)(objc_getClass("NSAutoreleasePool")), \
-             sel_registerName("alloc")), sel_registerName("init"));
-#    define FC_AUTORELEASEPOOL_END \
-         FC_MSG_SEND(autoreleasePool, sel_registerName("release")); }
-#  endif
-#elif defined(__EMSCRIPTEN__)
-#  include <emscripten/emscripten.h>
-#  include <string.h>
-#  include <stdlib.h> // getenv
-#  include <sys/stat.h> // mkdir
-#  if !defined(PATH_MAX)
-#    define PATH_MAX 4096
-#  endif
-#elif defined(__ANDROID__)
-#  include <android/asset_manager.h>
-#  include <android/log.h>
-#  include <android/native_activity.h>
-#  include <jni.h>
-#  include <pthread.h>
-#  include <string.h>
-static JNIEnv *fc__jnienv(JavaVM *vm);
-#elif defined(__linux__)
-#  include <locale.h>
-#  include <string.h>
-#  include <unistd.h> // readlink
-#  include <stdlib.h> // getenv
-#  include <sys/stat.h> // mkdir
-#endif
-
-static int fc_resdir(char *path, size_t path_max) {
-    if (!path || path_max == 0) {
-        return -1;
-    }
-#if defined(_WIN32)
-    size_t length = FC_STATIC_CAST(size_t)(GetModuleFileNameA(NULL, path, FC_STATIC_CAST(DWORD)(path_max)));
-    if (length > 0 && length < path_max) {
-        for (size_t i = length - 1; i > 0; i--) {
-            if (path[i] == FC_DIRECTORY_SEPARATOR) {
-                path[i + 1] = 0;
-                return 0;
-            }
+static void fc__locale_clean(char *locale) {
+    // Convert underscore to dash ("en_US" to "en-US")
+    // Remove encoding ("en-US.UTF-8" to "en-US")
+    char *ch = locale;
+    while (*ch != 0) {
+        if (*ch == '_') {
+            *ch = '-';
+        } else if (*ch == '.') {
+            *ch = 0;
+            break;
         }
+        ch++;
     }
-    path[0] = 0;
-    return -1;
-#elif defined(__linux__) && !defined(__ANDROID__)
-    ssize_t length = readlink("/proc/self/exe", path, path_max - 1);
-    if (length > 0 && FC_STATIC_CAST(size_t)(length) < path_max) {
-        for (ssize_t i = length - 1; i > 0; i--) {
-            if (path[i] == FC_DIRECTORY_SEPARATOR) {
-                path[i + 1] = 0;
-                return 0;
-            }
-        }
-    }
-    path[0] = 0;
-    return -1;
-#elif defined(__APPLE__)
-    int result = -1;
-    FC_AUTORELEASEPOOL_BEGIN
-    CFBundleRef bundle = CFBundleGetMainBundle();
-    if (bundle) {
-        CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL(bundle);
-        if (resourcesURL) {
-            Boolean success = CFURLGetFileSystemRepresentation(resourcesURL, TRUE,
-                                                               FC_REINTERPRET_CAST(UInt8 *)(path),
-                                                               FC_STATIC_CAST(CFIndex)(path_max) - 1);
-            CFRelease(resourcesURL);
-            if (success) {
-                unsigned long length = strlen(path);
-                if (length > 0 && length < path_max - 1) {
-                    // Add trailing slash
-                    if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
-                        path[length] = FC_DIRECTORY_SEPARATOR;
-                        path[length + 1] = 0;
-                    }
-                    result = 0;
-                }
-            }
-        }
-    }
-    FC_AUTORELEASEPOOL_END
-    if (result != 0) {
-        path[0] = 0;
-    }
-    return result;
-#elif defined(__ANDROID__)
-    path[0] = 0;
-    return 0;
-#elif defined(__EMSCRIPTEN__)
-    path[0] = 0;
-    return 0;
-#else
-#error Unsupported platform
-#endif
 }
 
+#if defined(__unix__) && !defined(__ANDROID__)
+
+#include <stdlib.h> // getenv
+#include <sys/stat.h> // mkdir
+
+/// *Unix only:* Gets a path from an environment variable, and appends `app_id` to it.
+/// If the environment variable is not found, the `default_path` is used.
+///
+/// If `env_var` is available, the resulting path is `getenv(env_var)/app_id/`.
+/// Otherwise, the resulting path is `getenv("HOME")/default_path/app_id/`.
+///
+/// Example: `fc__unixdir("XDG_DATA_HOME", ".local/share", "MyApp", path, path_max);`
+static int fc__unixdir(const char *env_var, const char *default_path,
+                       const char *app_id, char *path, size_t path_max) {
+    int result = -1;
+    const char *env_path = getenv(env_var);
+    if (env_path && *env_path) {
+        result = snprintf(path, path_max, "%s/%s/", env_path, app_id);
+    } else {
+        const char *home_path = getenv("HOME");
+        if (home_path && *home_path) {
+            result = snprintf(path, path_max, "%s/%s/%s/", home_path, default_path, app_id);
+        }
+    }
+    if (result <= 0 || FC_STATIC_CAST(size_t)(result) >= path_max) {
+        path[0] = 0;
+        return -1;
+    }
+    char *ch = path;
+    while (*(++ch)) {
+        if (*ch == '/') {
+            *ch = 0;
+            if (mkdir(path, 0700) != 0 && errno != EEXIST) {
+                path[0] = 0;
+                return -1;
+            }
+            *ch = '/';
+        }
+    }
+    return 0;
+}
+
+#endif // defined(__unix__)
+
+// MARK: - Apple
+
 #if defined(__APPLE__)
+
+#include <TargetConditionals.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <objc/objc.h>
+#include <objc/runtime.h>
+#include <objc/message.h>
+#include <objc/NSObjCRuntime.h>
+#include <sys/stat.h> // mkdir
+#if defined(__OBJC__) && __has_feature(objc_arc)
+#  define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
+#  define FC_AUTORELEASEPOOL_END }
+#else
+#  define FC_MSG_SEND (FC_REINTERPRET_CAST(id (*)(id, SEL))(objc_msgSend))
+#  define FC_AUTORELEASEPOOL_BEGIN { \
+       id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND(FC_REINTERPRET_CAST(id)(objc_getClass("NSAutoreleasePool")), \
+           sel_registerName("alloc")), sel_registerName("init"));
+#  define FC_AUTORELEASEPOOL_END \
+       FC_MSG_SEND(autoreleasePool, sel_registerName("release")); }
+#endif
 
 #ifdef __cplusplus
 extern "C"
@@ -339,7 +297,7 @@ static int fc__appledir(NSUInteger searchPathDirectory,
         goto fc_datadir_fail;
     }
     result = 0;
-    
+
 #if TARGET_OS_OSX
     bundle = CFBundleGetMainBundle();
     if (bundle) {
@@ -399,50 +357,157 @@ fc_datadir_fail:
     return result;
 }
 
-#endif // __APPLE__
-
-#if defined(__unix__) && !defined(__ANDROID__)
-
-/// *Linux only:* Gets a path from an environment variable, and appends `app_id` to it.
-/// If the environment variable is not found, the `default_path` is used.
-///
-/// If `env_var` is available, the resulting path is `getenv(env_var)/app_id/`.
-/// Otherwise, the resulting path is `getenv("HOME")/default_path/app_id/`.
-///
-/// Example: `fc__unixdir("XDG_DATA_HOME", ".local/share", "MyApp", path, path_max);`
-static int fc__unixdir(const char *env_var, const char *default_path,
-                       const char *app_id, char *path, size_t path_max) {
-    int result = -1;
-    const char *env_path = getenv(env_var);
-    if (env_path && *env_path) {
-        result = snprintf(path, path_max, "%s/%s/", env_path, app_id);
-    } else {
-        const char *home_path = getenv("HOME");
-        if (home_path && *home_path) {
-            result = snprintf(path, path_max, "%s/%s/%s/", home_path, default_path, app_id);
-        }
-    }
-    if (result <= 0 || FC_STATIC_CAST(size_t)(result) >= path_max) {
-        path[0] = 0;
+static int fc_resdir(char *path, size_t path_max) {
+    if (!path || path_max == 0) {
         return -1;
     }
-    char *ch = path;
-    while (*(++ch)) {
-        if (*ch == '/') {
-            *ch = 0;
-            if (mkdir(path, 0700) != 0 && errno != EEXIST) {
-                path[0] = 0;
-                return -1;
+    int result = -1;
+    FC_AUTORELEASEPOOL_BEGIN
+    CFBundleRef bundle = CFBundleGetMainBundle();
+    if (bundle) {
+        CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL(bundle);
+        if (resourcesURL) {
+            Boolean success = CFURLGetFileSystemRepresentation(resourcesURL, TRUE,
+                                                               FC_REINTERPRET_CAST(UInt8 *)(path),
+                                                               FC_STATIC_CAST(CFIndex)(path_max) - 1);
+            CFRelease(resourcesURL);
+            if (success) {
+                unsigned long length = strlen(path);
+                if (length > 0 && length < path_max - 1) {
+                    // Add trailing slash
+                    if (path[length - 1] != FC_DIRECTORY_SEPARATOR) {
+                        path[length] = FC_DIRECTORY_SEPARATOR;
+                        path[length + 1] = 0;
+                    }
+                    result = 0;
+                }
             }
-            *ch = '/';
         }
     }
-    return 0;
+    FC_AUTORELEASEPOOL_END
+    if (result != 0) {
+        path[0] = 0;
+    }
+    return result;
 }
 
-#endif // __unix__
+static int fc_datadir(const char *app_id, char *path, size_t path_max) {
+    const NSUInteger NSApplicationSupportDirectory = 14;
+    return fc__appledir(NSApplicationSupportDirectory, app_id, path, path_max);
+}
+
+static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
+    const NSUInteger NSCachesDirectory = 13;
+    return fc__appledir(NSCachesDirectory, app_id, path, path_max);
+}
+
+static int fc_locale(char *locale, size_t locale_max) {
+    if (!locale || locale_max < 3) {
+        return -1;
+    }
+    int result = -1;
+    FC_AUTORELEASEPOOL_BEGIN
+    CFArrayRef languages = CFLocaleCopyPreferredLanguages();
+    if (languages) {
+        if (CFArrayGetCount(languages) > 0) {
+            CFStringRef language = FC_REINTERPRET_CAST(CFStringRef)(CFArrayGetValueAtIndex(languages, 0));
+            if (language) {
+                CFIndex length = CFStringGetLength(language);
+                if (length > FC_STATIC_CAST(CFIndex)(locale_max) - 1) {
+                    length = FC_STATIC_CAST(CFIndex)(locale_max) - 1;
+                }
+                CFIndex outLength = CFStringGetBytes(language, CFRangeMake(0, length),
+                                                     kCFStringEncodingUTF8, 0, FALSE,
+                                                     FC_REINTERPRET_CAST(UInt8 *)(locale),
+                                                     FC_STATIC_CAST(CFIndex)(locale_max) - 1, NULL);
+                locale[outLength] = 0;
+                result = 0;
+            }
+        }
+        CFRelease(languages);
+    }
+    FC_AUTORELEASEPOOL_END
+    if (result == 0) {
+        fc__locale_clean(locale);
+    } else {
+        locale[0] = 0;
+    }
+    return result;
+}
+
+#endif // defined(__APPLE__)
+
+// MARK: - Linux
+
+#if defined(__linux__) && !defined(__ANDROID__)
+
+#include <locale.h>
+#include <string.h>
+#include <unistd.h> // readlink
+#include <sys/stat.h> // mkdir
+
+static int fc_resdir(char *path, size_t path_max) {
+    if (!path || path_max == 0) {
+        return -1;
+    }
+    ssize_t length = readlink("/proc/self/exe", path, path_max - 1);
+    if (length > 0 && FC_STATIC_CAST(size_t)(length) < path_max) {
+        for (ssize_t i = length - 1; i > 0; i--) {
+            if (path[i] == FC_DIRECTORY_SEPARATOR) {
+                path[i + 1] = 0;
+                return 0;
+            }
+        }
+    }
+    path[0] = 0;
+    return -1;
+}
+
+static int fc_datadir(const char *app_id, char *path, size_t path_max) {
+    return fc__unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
+}
+
+static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
+    return fc__unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
+}
+
+static int fc_locale(char *locale, size_t locale_max) {
+    if (!locale || locale_max < 3) {
+        return -1;
+    }
+    int result = -1;
+    setlocale(LC_ALL, "");
+    char *lang = setlocale(LC_ALL, NULL);
+    if (lang && lang[0] != 0 && !(lang[0] == 'C' && lang[1] == 0)) {
+        result = 0;
+        strncpy(locale, lang, locale_max);
+        locale[locale_max - 1] = 0;
+    }
+    if (result == 0) {
+        fc__locale_clean(locale);
+    } else {
+        locale[0] = 0;
+    }
+    return result;
+}
+
+#endif // defined(__unix__)
+
+// MARK: - Windows
 
 #if defined(_WIN32)
+
+#if !defined(WIN32_LEAN_AND_MEAN)
+#  define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <Shlobj.h>
+#pragma comment(lib, "Shell32.lib")
+#pragma comment(lib, "Ole32.lib")
+#include <stdlib.h> // wcstombs_s
+#if !defined(PATH_MAX)
+#  define PATH_MAX MAX_PATH
+#endif
 
 /// *Windows only:* Gets a path using `SHGetKnownFolderPath`, and appends `app_id` to it.
 static int fc__win32dir(REFKNOWNFOLDERID folder_id,
@@ -478,9 +543,122 @@ static int fc__win32dir(REFKNOWNFOLDERID folder_id,
     }
 }
 
+static int fc_resdir(char *path, size_t path_max) {
+    if (!path || path_max == 0) {
+        return -1;
+    }
+    size_t length = FC_STATIC_CAST(size_t)(GetModuleFileNameA(NULL, path, FC_STATIC_CAST(DWORD)(path_max)));
+    if (length > 0 && length < path_max) {
+        for (size_t i = length - 1; i > 0; i--) {
+            if (path[i] == FC_DIRECTORY_SEPARATOR) {
+                path[i + 1] = 0;
+                return 0;
+            }
+        }
+    }
+    path[0] = 0;
+    return -1;
+}
+
+static int fc_datadir(const char *app_id, char *path, size_t path_max) {
+#ifdef __cplusplus
+    return fc__win32dir(FOLDERID_RoamingAppData, app_id, path, path_max);
+#else
+    return fc__win32dir(&FOLDERID_RoamingAppData, app_id, path, path_max);
+#endif
+}
+
+static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
+#ifdef __cplusplus
+    return fc__win32dir(FOLDERID_LocalAppData, app_id, path, path_max);
+#else
+    return fc__win32dir(&FOLDERID_LocalAppData, app_id, path, path_max);
+#endif
+}
+
+static int fc_locale(char *locale, size_t locale_max) {
+    if (!locale || locale_max < 3) {
+        return -1;
+    }
+    int result = -1;
+    wchar_t wlocale[LOCALE_NAME_MAX_LENGTH];
+    if (GetUserDefaultLocaleName(wlocale, LOCALE_NAME_MAX_LENGTH) > 0) {
+        size_t count = 0;
+        if (wcstombs_s(&count, locale, locale_max, wlocale, locale_max - 1) == 0) {
+            result = 0;
+        }
+    }
+    if (result == 0) {
+        fc__locale_clean(locale);
+    } else {
+        locale[0] = 0;
+    }
+    return result;
+}
+
+static inline FILE *fc__windows_fopen(const char *filename, const char *mode) {
+    FILE *file = NULL;
+    fopen_s(&file, filename, mode);
+    return file;
+}
+
+static inline int fc__windows_fclose(FILE *stream) {
+    // The Windows fclose() function will crash if stream is NULL
+    if (stream) {
+        return fclose(stream);
+    } else {
+        return 0;
+    }
+}
+
+#define fopen(filename, mode) fc__windows_fopen(filename, mode)
+#define fclose(file) fc__windows_fclose(file)
+
+#if defined(_DEBUG)
+
+// Outputs to debug window if there is no console and IsDebuggerPresent() returns true.
+static int fc__printf(const char *format, ...) {
+    int result;
+    if (IsDebuggerPresent() && GetStdHandle(STD_OUTPUT_HANDLE) == NULL) {
+        char buffer[1024];
+        va_list args;
+        va_start(args, format);
+        result = vsprintf_s(buffer, sizeof(buffer), format, args);
+        va_end(args);
+        if (result >= 0) {
+            OutputDebugStringA(buffer);
+        }
+    } else {
+        va_list args;
+        va_start(args, format);
+        result = vprintf(format, args);
+        va_end(args);
+    }
+    return result;
+}
+
+#define printf(format, ...) fc__printf(format, __VA_ARGS__)
+
+#endif // _DEBUG
+
 #endif // _WIN32
 
+// MARK: - Android
+
 #if defined(__ANDROID__)
+
+#include <android/asset_manager.h>
+#include <android/log.h>
+#include <android/native_activity.h>
+#include <jni.h>
+#include <pthread.h>
+#include <string.h>
+
+#if !defined(FILE_COMPAT_ANDROID_ACTIVITY)
+#error FILE_COMPAT_ANDROID_ACTIVITY must be defined as a reference to an ANativeActivity (or NULL).
+#endif
+
+static JNIEnv *fc__jnienv(JavaVM *vm);
 
 /// *Android Only:* Gets a path from a `Context` method like `getFilesDir` or `getCacheDir`.
 static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
@@ -547,46 +725,21 @@ static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
     return result;
 }
 
-#endif
+static int fc_resdir(char *path, size_t path_max) {
+    if (!path || path_max == 0) {
+        return -1;
+    }
+    path[0] = 0;
+    return 0;
+}
 
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
-#if defined(_WIN32)
-#ifdef __cplusplus
-    return fc__win32dir(FOLDERID_RoamingAppData, app_id, path, path_max);
-#else
-    return fc__win32dir(&FOLDERID_RoamingAppData, app_id, path, path_max);
-#endif
-#elif defined(__unix__) && !defined(__ANDROID__)
-    return fc__unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
-#elif defined(__ANDROID__)
     (void)app_id;
     return fc__androiddir("getFilesDir", path, path_max);
-#elif defined(__APPLE__)
-    const NSUInteger NSApplicationSupportDirectory = 14;
-    return fc__appledir(NSApplicationSupportDirectory, app_id, path, path_max);
-#else
-#error Unsupported platform
-#endif
 }
 
 static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
-#if defined(_WIN32)
-#ifdef __cplusplus
-    return fc__win32dir(FOLDERID_LocalAppData, app_id, path, path_max);
-#else
-    return fc__win32dir(&FOLDERID_LocalAppData, app_id, path, path_max);
-#endif
-#elif defined(__unix__) && !defined(__ANDROID__)
-    return fc__unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
-#elif defined(__ANDROID__)
-    (void)app_id;
     return fc__androiddir("getCacheDir", path, path_max);
-#elif defined(__APPLE__)
-    const NSUInteger NSCachesDirectory = 13;
-    return fc__appledir(NSCachesDirectory, app_id, path, path_max);
-#else
-#error Unsupported platform
-#endif
 }
 
 static int fc_locale(char *locale, size_t locale_max) {
@@ -594,58 +747,6 @@ static int fc_locale(char *locale, size_t locale_max) {
         return -1;
     }
     int result = -1;
-#if defined(_WIN32)
-    wchar_t wlocale[LOCALE_NAME_MAX_LENGTH];
-    if (GetUserDefaultLocaleName(wlocale, LOCALE_NAME_MAX_LENGTH) > 0) {
-        size_t count = 0;
-        if (wcstombs_s(&count, locale, locale_max, wlocale, locale_max - 1) == 0) {
-            result = 0;
-        }
-    }
-#elif defined(__linux__) && !defined(__ANDROID__)
-    setlocale(LC_ALL, "");
-    char *lang = setlocale(LC_ALL, NULL);
-    if (lang && lang[0] != 0 && !(lang[0] == 'C' && lang[1] == 0)) {
-        result = 0;
-        strncpy(locale, lang, locale_max);
-        locale[locale_max - 1] = 0;
-    }
-#elif defined(__APPLE__)
-    FC_AUTORELEASEPOOL_BEGIN
-    CFArrayRef languages = CFLocaleCopyPreferredLanguages();
-    if (languages) {
-        if (CFArrayGetCount(languages) > 0) {
-            CFStringRef language = FC_REINTERPRET_CAST(CFStringRef)(CFArrayGetValueAtIndex(languages, 0));
-            if (language) {
-                CFIndex length = CFStringGetLength(language);
-                if (length > FC_STATIC_CAST(CFIndex)(locale_max) - 1) {
-                    length = FC_STATIC_CAST(CFIndex)(locale_max) - 1;
-                }
-                CFIndex outLength = CFStringGetBytes(language, CFRangeMake(0, length),
-                                                     kCFStringEncodingUTF8, 0, FALSE,
-                                                     FC_REINTERPRET_CAST(UInt8 *)(locale),
-                                                     FC_STATIC_CAST(CFIndex)(locale_max) - 1, NULL);
-                locale[outLength] = 0;
-                result = 0;
-            }
-        }
-        CFRelease(languages);
-    }
-    FC_AUTORELEASEPOOL_END
-#elif defined(__EMSCRIPTEN__)
-    static const char *script =
-        "(function() { try {"
-        "var lang = navigator.language || navigator.userLanguage || navigator.browserLanguage;"
-        "if (typeof lang === 'string') { return lang; } else { return ''; }"
-        "} catch(err) { return ''; } }())";
-
-    char *lang = emscripten_run_script_string(script);
-    if (lang && lang[0] != 0) {
-        result = 0;
-        strncpy(locale, lang, locale_max);
-        locale[locale_max - 1] = 0;
-    }
-#elif defined(__ANDROID__)
     ANativeActivity *activity = FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY);
     if (activity) {
         // getResources().getConfiguration().locale.toString()
@@ -721,84 +822,15 @@ static int fc_locale(char *locale, size_t locale_max) {
             }
             (*jniEnv)->PopLocalFrame(jniEnv, NULL);
         }
-#endif
+#endif // !defined(__cplusplus)
     }
-#else
-#error Unsupported platform
-#endif
     if (result == 0) {
-        // Convert underscore to dash ("en_US" to "en-US")
-        // Remove encoding ("en-US.UTF-8" to "en-US")
-        char *ch = locale;
-        while (*ch != 0) {
-            if (*ch == '_') {
-                *ch = '-';
-            } else if (*ch == '.') {
-                *ch = 0;
-                break;
-            }
-            ch++;
-        }
+        fc__locale_clean(locale);
     } else {
         locale[0] = 0;
     }
     return result;
 }
-
-// MARK: - Windows
-
-#if defined(_WIN32)
-
-static inline FILE *fc__windows_fopen(const char *filename, const char *mode) {
-    FILE *file = NULL;
-    fopen_s(&file, filename, mode);
-    return file;
-}
-
-static inline int fc__windows_fclose(FILE *stream) {
-    // The Windows fclose() function will crash if stream is NULL
-    if (stream) {
-        return fclose(stream);
-    } else {
-        return 0;
-    }
-}
-
-#define fopen(filename, mode) fc__windows_fopen(filename, mode)
-#define fclose(file) fc__windows_fclose(file)
-
-#if defined(_DEBUG)
-
-// Outputs to debug window if there is no console and IsDebuggerPresent() returns true.
-static int fc__printf(const char *format, ...) {
-    int result;
-    if (IsDebuggerPresent() && GetStdHandle(STD_OUTPUT_HANDLE) == NULL) {
-        char buffer[1024];
-        va_list args;
-        va_start(args, format);
-        result = vsprintf_s(buffer, sizeof(buffer), format, args);
-        va_end(args);
-        if (result >= 0) {
-            OutputDebugStringA(buffer);
-        }
-    } else {
-        va_list args;
-        va_start(args, format);
-        result = vprintf(format, args);
-        va_end(args);
-    }
-    return result;
-}
-
-#define printf(format, ...) fc__printf(format, __VA_ARGS__)
-
-#endif // _DEBUG
-
-#endif // _WIN32
-
-// MARK: - Android
-
-#if defined(__ANDROID__)
 
 #if !defined(_BSD_SOURCE)
 FILE* funopen(const void* __cookie,
@@ -807,10 +839,6 @@ FILE* funopen(const void* __cookie,
               fpos_t (*__seek_fn)(void*, fpos_t, int),
               int (*__close_fn)(void*));
 #endif // _BSD_SOURCE
-
-#if !defined(FILE_COMPAT_ANDROID_ACTIVITY)
-#error FILE_COMPAT_ANDROID_ACTIVITY must be defined as a reference to an ANativeActivity (or NULL).
-#endif
 
 static pthread_key_t fc__jnienv_key;
 static pthread_once_t fc__jnienv_key_once = PTHREAD_ONCE_INIT;
@@ -889,6 +917,60 @@ static FILE *fc__android_fopen(const char *filename, const char *mode) {
 #define printf(...) __android_log_print(ANDROID_LOG_INFO, "stdout", __VA_ARGS__)
 #define fopen(filename, mode) fc__android_fopen(filename, mode)
 
-#endif // __ANDROID__
+#endif // defined(__ANDROID__)
+
+// MARK: - Emscripten
+
+#if defined(__EMSCRIPTEN__)
+
+#include <emscripten/emscripten.h>
+#include <string.h>
+#include <stdlib.h> // getenv
+#if !defined(PATH_MAX)
+#  define PATH_MAX 4096
+#endif
+
+static int fc_resdir(char *path, size_t path_max) {
+    if (!path || path_max == 0) {
+        return -1;
+    }
+    path[0] = 0;
+    return 0;
+}
+
+static int fc_datadir(const char *app_id, char *path, size_t path_max) {
+    return fc__unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
+}
+
+static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
+    return fc__unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
+}
+
+static int fc_locale(char *locale, size_t locale_max) {
+    if (!locale || locale_max < 3) {
+        return -1;
+    }
+    int result = -1;
+    static const char *script =
+        "(function() { try {"
+        "var lang = navigator.language || navigator.userLanguage || navigator.browserLanguage;"
+        "if (typeof lang === 'string') { return lang; } else { return ''; }"
+        "} catch(err) { return ''; } }())";
+
+    char *lang = emscripten_run_script_string(script);
+    if (lang && lang[0] != 0) {
+        result = 0;
+        strncpy(locale, lang, locale_max);
+        locale[locale_max - 1] = 0;
+    }
+    if (result == 0) {
+        fc__locale_clean(locale);
+    } else {
+        locale[0] = 0;
+    }
+    return result;
+}
+
+#endif // defined(__EMSCRIPTEN__)
 
 #endif // FILE_COMPAT_H
