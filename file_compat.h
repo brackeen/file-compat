@@ -149,6 +149,14 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 
 // MARK: - Implementation
 
+#ifdef __cplusplus
+#  define FC_STATIC_CAST(value_type) static_cast<value_type>
+#  define FC_REINTERPRET_CAST(value_type) reinterpret_cast<value_type>
+#else
+#  define FC_STATIC_CAST(value_type) (value_type)
+#  define FC_REINTERPRET_CAST(value_type) (value_type)
+#endif
+
 #if defined(_WIN32)
 #  if !defined(WIN32_LEAN_AND_MEAN)
 #    define WIN32_LEAN_AND_MEAN
@@ -176,9 +184,9 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #    define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
 #    define FC_AUTORELEASEPOOL_END }
 #  else
-#    define FC_MSG_SEND ((id (*)(id, SEL))objc_msgSend)
+#    define FC_MSG_SEND (FC_REINTERPRET_CAST(id (*)(id, SEL))(objc_msgSend))
 #    define FC_AUTORELEASEPOOL_BEGIN { \
-         id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND((id)objc_getClass("NSAutoreleasePool"), \
+         id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND(FC_REINTERPRET_CAST(id)(objc_getClass("NSAutoreleasePool")), \
              sel_registerName("alloc")), sel_registerName("init"));
 #    define FC_AUTORELEASEPOOL_END \
          FC_MSG_SEND(autoreleasePool, sel_registerName("release")); }
@@ -212,9 +220,9 @@ static int fc_resdir(char *path, size_t path_max) {
         return -1;
     }
 #if defined(_WIN32)
-    DWORD length = GetModuleFileNameA(NULL, path, path_max);
+    size_t length = FC_STATIC_CAST(size_t)(GetModuleFileNameA(NULL, path, FC_STATIC_CAST(DWORD)(path_max)));
     if (length > 0 && length < path_max) {
-        for (DWORD i = length - 1; i > 0; i--) {
+        for (size_t i = length - 1; i > 0; i--) {
             if (path[i] == FC_DIRECTORY_SEPARATOR) {
                 path[i + 1] = 0;
                 return 0;
@@ -225,7 +233,7 @@ static int fc_resdir(char *path, size_t path_max) {
     return -1;
 #elif defined(__linux__) && !defined(__ANDROID__)
     ssize_t length = readlink("/proc/self/exe", path, path_max - 1);
-    if (length > 0 && (size_t)length < path_max) {
+    if (length > 0 && FC_STATIC_CAST(size_t)(length) < path_max) {
         for (ssize_t i = length - 1; i > 0; i--) {
             if (path[i] == FC_DIRECTORY_SEPARATOR) {
                 path[i + 1] = 0;
@@ -242,8 +250,9 @@ static int fc_resdir(char *path, size_t path_max) {
     if (bundle) {
         CFURLRef resourcesURL = CFBundleCopyResourcesDirectoryURL(bundle);
         if (resourcesURL) {
-            Boolean success = CFURLGetFileSystemRepresentation(resourcesURL, TRUE, (UInt8 *)path,
-                                                               (CFIndex)path_max - 1);
+            Boolean success = CFURLGetFileSystemRepresentation(resourcesURL, TRUE,
+                                                               FC_REINTERPRET_CAST(UInt8 *)(path),
+                                                               FC_STATIC_CAST(CFIndex)(path_max) - 1);
             CFRelease(resourcesURL);
             if (success) {
                 unsigned long length = strlen(path);
@@ -303,16 +312,16 @@ static int fc__appledir(NSUInteger searchPathDirectory,
     FC_AUTORELEASEPOOL_BEGIN
     CFArrayRef array =
 #if __has_feature(objc_arc)
-    (__bridge CFArrayRef)
+    FC_REINTERPRET_CAST(__bridge CFArrayRef)
 #else
-    (CFArrayRef)
+    FC_REINTERPRET_CAST(CFArrayRef)
 #endif
-    NSSearchPathForDirectoriesInDomains(searchPathDirectory, NSUserDomainMask, TRUE);
+    (NSSearchPathForDirectoriesInDomains(searchPathDirectory, NSUserDomainMask, TRUE));
     if (!array || CFArrayGetCount(array) == 0) {
         goto fc_datadir_fail;
     }
-    dir = (CFStringRef)CFArrayGetValueAtIndex(array, 0);
-    success = CFStringGetFileSystemRepresentation(dir, path, (CFIndex)path_max - 1);
+    dir = FC_REINTERPRET_CAST(CFStringRef)(CFArrayGetValueAtIndex(array, 0));
+    success = CFStringGetFileSystemRepresentation(dir, path, FC_STATIC_CAST(CFIndex)(path_max) - 1);
     if (!success) {
         goto fc_datadir_fail;
     }
@@ -345,11 +354,11 @@ static int fc__appledir(NSUInteger searchPathDirectory,
                 bundle_id_length = CFStringGetMaximumSizeForEncoding(bundle_id_length,
                                                                      kCFStringEncodingUTF8);
                 if (bundle_id_length > 0 &&
-                    length + (unsigned long)bundle_id_length + 1 < path_max - 1 &&
+                    length + FC_STATIC_CAST(unsigned long)(bundle_id_length) + 1 < path_max - 1 &&
                     CFStringGetCString(bundle_id, path + length, bundle_id_length,
                                        kCFStringEncodingUTF8)) {
-                    path[length + (unsigned long)bundle_id_length] = FC_DIRECTORY_SEPARATOR;
-                    path[length + (unsigned long)bundle_id_length + 1] = 0;
+                    path[length + FC_STATIC_CAST(unsigned long)(bundle_id_length)] = FC_DIRECTORY_SEPARATOR;
+                    path[length + FC_STATIC_CAST(unsigned long)(bundle_id_length) + 1] = 0;
                     if (mkdir(path, 0700) != 0 && errno != EEXIST) {
                         result = -1;
                         goto fc_datadir_fail;
@@ -413,7 +422,7 @@ static int fc__unixdir(const char *env_var, const char *default_path,
             result = snprintf(path, path_max, "%s/%s/%s/", home_path, default_path, app_id);
         }
     }
-    if (result <= 0 || (size_t)result >= path_max) {
+    if (result <= 0 || FC_STATIC_CAST(size_t)(result) >= path_max) {
         path[0] = 0;
         return -1;
     }
@@ -475,7 +484,7 @@ static int fc__win32dir(REFKNOWNFOLDERID folder_id,
 
 /// *Android Only:* Gets a path from a `Context` method like `getFilesDir` or `getCacheDir`.
 static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
-    ANativeActivity *activity = (ANativeActivity *)FILE_COMPAT_ANDROID_ACTIVITY;
+    ANativeActivity *activity = FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY);
     if (!activity) {
         path[0] = 0;
         return -1;
@@ -494,7 +503,7 @@ static int fc__androiddir(const char *methodName, char *path, size_t path_max) {
         jobject file = jniEnv->CallObjectMethod(activity->clazz, getDirMethod);
         jclass fileClass = jniEnv->FindClass("java/io/File");
         jmethodID getAbsolutePathMethod = jniEnv->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
-        jstring valueString = (jstring)jniEnv->CallObjectMethod(file, getAbsolutePathMethod);
+        jstring valueString = reinterpret_cast<jstring>(jniEnv->CallObjectMethod(file, getAbsolutePathMethod));
 
         const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
         if (nativeString) {
@@ -606,15 +615,16 @@ static int fc_locale(char *locale, size_t locale_max) {
     CFArrayRef languages = CFLocaleCopyPreferredLanguages();
     if (languages) {
         if (CFArrayGetCount(languages) > 0) {
-            CFStringRef language = (CFStringRef)CFArrayGetValueAtIndex(languages, 0);
+            CFStringRef language = FC_REINTERPRET_CAST(CFStringRef)(CFArrayGetValueAtIndex(languages, 0));
             if (language) {
                 CFIndex length = CFStringGetLength(language);
-                if (length > (CFIndex)locale_max - 1) {
-                    length = (CFIndex)locale_max - 1;
+                if (length > FC_STATIC_CAST(CFIndex)(locale_max) - 1) {
+                    length = FC_STATIC_CAST(CFIndex)(locale_max) - 1;
                 }
                 CFIndex outLength = CFStringGetBytes(language, CFRangeMake(0, length),
                                                      kCFStringEncodingUTF8, 0, FALSE,
-                                                     (UInt8 *)locale, (CFIndex)locale_max - 1, NULL);
+                                                     FC_REINTERPRET_CAST(UInt8 *)(locale),
+                                                     FC_STATIC_CAST(CFIndex)(locale_max) - 1, NULL);
                 locale[outLength] = 0;
                 result = 0;
             }
@@ -636,7 +646,7 @@ static int fc_locale(char *locale, size_t locale_max) {
         locale[locale_max - 1] = 0;
     }
 #elif defined(__ANDROID__)
-    ANativeActivity *activity = (ANativeActivity *)FILE_COMPAT_ANDROID_ACTIVITY;
+    ANativeActivity *activity = FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY);
     if (activity) {
         // getResources().getConfiguration().locale.toString()
 #ifdef __cplusplus
@@ -659,7 +669,7 @@ static int fc_locale(char *locale, size_t locale_max) {
             jobject localeObject = jniEnv->GetObjectField(configuration, localeField);
             jclass localeClass = jniEnv->GetObjectClass(localeObject);
             jmethodID toStringMethod = jniEnv->GetMethodID(localeClass, "toString", "()Ljava/lang/String;");
-            jstring valueString = (jstring)jniEnv->CallObjectMethod(localeObject, toStringMethod);
+            jstring valueString = reinterpret_cast<jstring>(jniEnv->CallObjectMethod(localeObject, toStringMethod));
 
             const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
             if (nativeString) {
@@ -807,7 +817,7 @@ static pthread_once_t fc__jnienv_key_once = PTHREAD_ONCE_INIT;
 
 static void fc__jnienv_detach(void *value) {
     if (value) {
-        JavaVM *vm = (JavaVM *)value;
+        JavaVM *vm = FC_REINTERPRET_CAST(JavaVM *)(value);
 #ifdef __cplusplus
         vm->DetachCurrentThread();
 #else
@@ -824,7 +834,7 @@ static JNIEnv *fc__jnienv(JavaVM *vm) {
     JNIEnv *jniEnv = NULL;
     int setThreadLocal = 0;
 #ifdef __cplusplus
-    setThreadLocal = (vm->GetEnv((void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
+    setThreadLocal = (vm->GetEnv(FC_REINTERPRET_CAST(void **)(&jniEnv), JNI_VERSION_1_4) != JNI_OK &&
             vm->AttachCurrentThread(&jniEnv, NULL) == JNI_OK);
 #else
     setThreadLocal = ((*vm)->GetEnv(vm, (void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
@@ -838,7 +848,7 @@ static JNIEnv *fc__jnienv(JavaVM *vm) {
 }
 
 static int fc__android_read(void *cookie, char *buf, int size) {
-    return AAsset_read((AAsset *)cookie, buf, (size_t)size);
+    return AAsset_read(FC_REINTERPRET_CAST(AAsset *)(cookie), buf, FC_STATIC_CAST(size_t)(size));
 }
 
 static int fc__android_write(void *cookie, const char *buf, int size) {
@@ -850,16 +860,16 @@ static int fc__android_write(void *cookie, const char *buf, int size) {
 }
 
 static fpos_t fc__android_seek(void *cookie, fpos_t offset, int whence) {
-    return AAsset_seek((AAsset *)cookie, offset, whence);
+    return AAsset_seek(FC_REINTERPRET_CAST(AAsset *)(cookie), offset, whence);
 }
 
 static int fc__android_close(void *cookie) {
-    AAsset_close((AAsset *)cookie);
+    AAsset_close(FC_REINTERPRET_CAST(AAsset *)(cookie));
     return 0;
 }
 
 static FILE *fc__android_fopen(const char *filename, const char *mode) {
-    ANativeActivity *activity = (ANativeActivity *)FILE_COMPAT_ANDROID_ACTIVITY;
+    ANativeActivity *activity = FC_REINTERPRET_CAST(ANativeActivity *)(FILE_COMPAT_ANDROID_ACTIVITY);
     AAssetManager *assetManager = NULL;
     AAsset *asset = NULL;
     if (activity) {
