@@ -867,7 +867,7 @@ static void fc__create_jnienv_key() {
 
 static JNIEnv *fc__jnienv(JavaVM *vm) {
     JNIEnv *jniEnv = NULL;
-    int setThreadLocal = 0;
+    int setThreadLocal;
 #ifdef __cplusplus
     setThreadLocal = (vm->GetEnv(FC_REINTERPRET_CAST(void **)(&jniEnv), JNI_VERSION_1_4) != JNI_OK &&
             vm->AttachCurrentThread(&jniEnv, NULL) == JNI_OK);
