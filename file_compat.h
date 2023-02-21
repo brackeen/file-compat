@@ -337,7 +337,7 @@ static int fc__appledir(NSUInteger searchPathDirectory,
         } else {
             size_t app_id_length = strlen(app_id);
             if (length + app_id_length + 1 < path_max - 1) {
-                strcpy(path + length, app_id);
+                memcpy(path + length, app_id, app_id_length);
                 path[length + app_id_length] = FC_DIRECTORY_SEPARATOR;
                 path[length + app_id_length + 1] = 0;
                 if (mkdir(path, 0700) != 0 && errno != EEXIST) {
