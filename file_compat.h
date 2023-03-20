@@ -274,7 +274,11 @@ static int fc__appledir(NSUInteger searchPathDirectory,
     FC_AUTORELEASEPOOL_BEGIN
     CFArrayRef array =
 #if __has_feature(objc_arc)
-    FC_REINTERPRET_CAST(__bridge CFArrayRef)
+#  if defined(__cpluplus)
+    reinterpret_cast<CFArrayRef>(__bridge void *)
+#  else
+    (__bridge CFArrayRef)
+#  endif
 #else
     FC_REINTERPRET_CAST(CFArrayRef)
 #endif
