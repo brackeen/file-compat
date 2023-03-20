@@ -1,15 +1,15 @@
-#ifndef __cplusplus
-#error Compile this file as C++ to test if file_compat.h compiles as C++
-#endif
-
 #include <assert.h>
-
 #include "file_compat.h"
-#include "test_write.h"
 
 #if defined(__ANDROID__)
-extern ANativeActivity *android_activity;
+ANativeActivity *android_activity;
 #define FILE_COMPAT_ANDROID_ACTIVITY android_activity
+#endif
+
+#if defined(_MSC_VER)
+#define strcpy(dst, src) strcpy_s((dst), sizeof(dst), (src))
+#define strcat(dst, src) strcat_s((dst), sizeof(dst), (src))
+#define fscanf fscanf_s
 #endif
 
 static const char APP_ID[] = "FileCompatTestApp";
@@ -69,7 +69,7 @@ int test_writeable_dir(const char *dir_name, const char *datadir_path) {
     return 0;
 }
 
-int test_file_writing(void) {
+static int test_file_writing(void) {
 #if defined(__ANDROID__)
     assert(android_activity != NULL);
 #endif
@@ -112,3 +112,44 @@ int test_file_writing(void) {
 #endif
 }
 
+static void test_basic(void) {
+    char locale[128];
+    fc_locale(locale, sizeof(locale));
+    printf("Locale (full):  \"%s\"\n", locale);
+
+    fc_locale(locale, 3);
+    printf("Locale (short): \"%s\"\n", locale);
+
+    char path[PATH_MAX];
+    fc_resdir(path, PATH_MAX);
+    printf("Resources dir: \"%s\"\n", path);
+}
+
+int main(void) {
+#if defined(__OBJC__)
+#  if __has_feature(objc_arc)
+    const char *arc = "ARC";
+#  else
+    const char *arc = "NO ARC";
+#  endif
+#  if defined(__cplusplus)
+    printf("Objective-C++ (%s)\n", arc);
+#  else
+    printf("Objective-C (%s)\n", arc);
+#  endif
+#endif
+#if defined(__cplusplus)
+    printf("__cplusplus=%li\n", __cplusplus);
+#endif
+
+    test_basic();
+    return test_file_writing();
+}
+
+#if defined(__ANDROID__)
+JNIEXPORT
+void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
+    android_activity = activity;
+    main();
+}
+#endif
