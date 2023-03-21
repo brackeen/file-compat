@@ -2,7 +2,7 @@
 #include "file_compat.h"
 
 #if defined(__ANDROID__)
-ANativeActivity *android_activity;
+static ANativeActivity *android_activity;
 #define FILE_COMPAT_ANDROID_ACTIVITY android_activity
 #endif
 
@@ -95,6 +95,27 @@ static void test_basic(void) {
     printf("Resources dir: \"%s\"\n", path);
 }
 
+static void print_lang(void) {
+#if defined(__OBJC__)
+#  if __has_feature(objc_arc)
+    const char *arc = "ARC";
+#  else
+    const char *arc = "NO ARC";
+#  endif
+#  if defined(__cplusplus)
+    printf("Objective-C++ (%s)\n", arc);
+#  else
+    printf("Objective-C (%s)\n", arc);
+#  endif
+#endif
+#if defined(__cplusplus)
+    printf("__cplusplus=%li\n", __cplusplus);
+#endif
+#if defined(__STDC_VERSION__)
+    printf("__STDC_VERSION__=%li\n", __STDC_VERSION__);
+#endif
+}
+
 #if defined(__EMSCRIPTEN__)
 #  ifdef __cplusplus
 extern "C"
@@ -133,28 +154,7 @@ EM_JS(void, sync_and_test_all, (const char *data_path, const char *cache_path), 
 #endif
 
 int main(void) {
-#if defined(__OBJC__)
-#  if __has_feature(objc_arc)
-    const char *arc = "ARC";
-#  else
-    const char *arc = "NO ARC";
-#  endif
-#  if defined(__cplusplus)
-    printf("Objective-C++ (%s)\n", arc);
-#  else
-    printf("Objective-C (%s)\n", arc);
-#  endif
-#endif
-#if defined(__cplusplus)
-    printf("__cplusplus=%li\n", __cplusplus);
-#endif
-
-#if defined(__ANDROID__)
-    assert(android_activity != NULL);
-    if (android_activity == NULL) {
-        return -1;
-    }
-#endif
+    print_lang();
 
 #if defined(__EMSCRIPTEN__)
     char data_path[PATH_MAX];
@@ -170,8 +170,12 @@ int main(void) {
 
 #if defined(__ANDROID__)
 JNIEXPORT
-void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
+void ANativeActivity_onCreate(ANativeActivity *activity, void *saved_state, size_t saved_state_size) {
+    (void)saved_state;
+    (void)saved_state_size;
     android_activity = activity;
-    main();
+    print_lang();
+    int result = test_all();
+    printf("Result: %i\n", result);
 }
 #endif
