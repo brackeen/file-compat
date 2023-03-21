@@ -44,9 +44,11 @@ FILE *file = fopen(path, "r");
 fclose(file);
 ```
 
-For Android, define `FILE_COMPAT_ANDROID_ACTIVITY` to be a reference to an `ANativeActivity` instance (or to a function that returns an `ANativeActivity` instance). May be `NULL`, which means `fopen` won't open files in the APK.
+For Android, define `FILE_COMPAT_ANDROID_ACTIVITY` to be a reference to an `ANativeActivity` instance (or to a function that returns an `ANativeActivity` instance).
 
 ```C
-#define FILE_COMPAT_ANDROID_ACTIVITY app->activity
 #include "file_compat.h"
+#define FILE_COMPAT_ANDROID_ACTIVITY functionThatGetsAndroidActivity()
+
+ANativeActivity *functionThatGetsAndroidActivity(void);
 ```
