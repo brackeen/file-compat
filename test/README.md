@@ -6,7 +6,9 @@ The [test.yml](../.github/workflows/test.yml) GitHub Action uses the [CMakeLists
 
 * Linux: C, C++
 * Windows: C, C++
-* macOS: C, C++, Objective-C, Objective-C++ (both with and without ARC). 
+* macOS: C, C++, Objective-C, Objective-C++ (both with and without ARC).
+
+macOS executables are automatically tested, but bundled sandboxed apps are not.
 
 ## Testing manually
 
