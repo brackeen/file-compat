@@ -2,6 +2,8 @@
 
 A C header file to help write cross-platform code related to `stdio` functions.
 
+[![Build and Test](https://github.com/brackeen/file-compat/actions/workflows/test.yml/badge.svg)](https://github.com/brackeen/file-compat/actions/workflows/test.yml)
+
 ## Redefined `stdio` functions
 These functions are redefined so that they work as expected on Windows and Android.
 
@@ -17,12 +19,12 @@ These functions are redefined so that they work as expected on Windows and Andro
 ## Added functions
 These added functions work on Windows, Linux, macOS, iOS, Android, and Emscripten.
 
-| Function      | Description
-|---------------|-----------------------------------------------------------------------------------
-| `fc_locale`   | Gets the user's preferred language (for example, "en-US").
-| `fc_resdir`   | Gets the current executable's directory (Windows, Linux) or its resources directory (macOS, iOS).
-| `fc_datadir`  | Gets the current executable's data directory, useful for saving preferences.
-| `fc_cachedir` | Gets the current executable's cache directory, useful for saving downloaded files.
+| Function        | Description
+|-----------------|-----------------------------------------------------------------------------------
+| `fc_locale()`   | Gets the user's preferred language (for example, "en-US").
+| `fc_resdir()`   | Gets the current executable's directory (Windows, Linux) or its resources directory (macOS, iOS).
+| `fc_datadir()`  | Gets the current executable's data directory, useful for saving preferences.
+| `fc_cachedir()` | Gets the current executable's cache directory, useful for saving downloaded files.
 
 ## Usage
 To use, include `file_compat.h` and use `fopen`, `printf`, etc. like normal.
