@@ -160,9 +160,15 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #ifdef __cplusplus
 #  define FC_STATIC_CAST(value_type) static_cast<value_type>
 #  define FC_REINTERPRET_CAST(value_type) reinterpret_cast<value_type>
+#  if __cplusplus >= 201103L
+#    define FC_NULL nullptr
+#  else
+#    define FC_NULL NULL
+#  endif
 #else
 #  define FC_STATIC_CAST(value_type) (value_type)
 #  define FC_REINTERPRET_CAST(value_type) (value_type)
+#  define FC_NULL NULL
 #endif
 
 static void fc_private_locale_clean(char *locale) {
@@ -263,11 +269,11 @@ static int fc_private_appledir(NSUInteger searchPathDirectory,
     int result = -1;
 
 #if TARGET_OS_OSX
-    CFBundleRef bundle = NULL;
+    CFBundleRef bundle = FC_NULL;
     int bundle_id_appended = 0;
 #endif
 
-    CFStringRef dir = NULL;
+    CFStringRef dir = FC_NULL;
     Boolean success = NO;
     unsigned long length = 0;
 
@@ -427,7 +433,7 @@ static int fc_locale(char *locale, size_t locale_max) {
                 CFIndex outLength = CFStringGetBytes(language, CFRangeMake(0, length),
                                                      kCFStringEncodingUTF8, 0, FALSE,
                                                      FC_REINTERPRET_CAST(UInt8 *)(locale),
-                                                     FC_STATIC_CAST(CFIndex)(locale_max) - 1, NULL);
+                                                     FC_STATIC_CAST(CFIndex)(locale_max) - 1, FC_NULL);
                 locale[outLength] = 0;
                 result = 0;
             }
@@ -485,7 +491,7 @@ static int fc_locale(char *locale, size_t locale_max) {
     }
     int result = -1;
     setlocale(LC_ALL, "");
-    char *lang = setlocale(LC_ALL, NULL);
+    char *lang = setlocale(LC_ALL, FC_NULL);
     if (lang && lang[0] != 0 && !(lang[0] == 'C' && lang[1] == 0)) {
         result = 0;
         strncpy(locale, lang, locale_max);
@@ -520,10 +526,10 @@ static int fc_locale(char *locale, size_t locale_max) {
 /// *Windows only:* Gets a path using `SHGetKnownFolderPath`, and appends `app_id` to it.
 static int fc_private_win32dir(REFKNOWNFOLDERID folder_id,
                                const char *app_id, char *path, size_t path_max) {
-    wchar_t *wpath = NULL;
-    size_t count = 0; // Output count including NULL
+    wchar_t *wpath = FC_NULL;
+    size_t count = 0; // Output count including trailing zero
     size_t app_id_length = strlen(app_id);
-    int success = (SUCCEEDED(SHGetKnownFolderPath(folder_id, 0, NULL, &wpath)) &&
+    int success = (SUCCEEDED(SHGetKnownFolderPath(folder_id, 0, FC_NULL, &wpath)) &&
                    wcstombs_s(&count, path, path_max, wpath, path_max - 1) == 0 &&
                    count > 1 && count + app_id_length + 2 <= path_max);
     CoTaskMemFree(wpath);
@@ -542,7 +548,7 @@ static int fc_private_win32dir(REFKNOWNFOLDERID folder_id,
         path[count - 1] = FC_DIRECTORY_SEPARATOR;
         path[count] = 0;
     }
-    int result = SHCreateDirectoryExA(NULL, path, NULL);
+    int result = SHCreateDirectoryExA(FC_NULL, path, FC_NULL);
     if (result == ERROR_SUCCESS || result == ERROR_ALREADY_EXISTS) {
         return 0;
     } else {
@@ -555,7 +561,7 @@ static int fc_resdir(char *path, size_t path_max) {
     if (!path || path_max == 0) {
         return -1;
     }
-    size_t length = FC_STATIC_CAST(size_t)(GetModuleFileNameA(NULL, path, FC_STATIC_CAST(DWORD)(path_max)));
+    size_t length = FC_STATIC_CAST(size_t)(GetModuleFileNameA(FC_NULL, path, FC_STATIC_CAST(DWORD)(path_max)));
     if (length > 0 && length < path_max) {
         for (size_t i = length - 1; i > 0; i--) {
             if (path[i] == FC_DIRECTORY_SEPARATOR) {
@@ -605,7 +611,7 @@ static int fc_locale(char *locale, size_t locale_max) {
 }
 
 static inline FILE *fc_private_windows_fopen(const char *filename, const char *mode) {
-    FILE *file = NULL;
+    FILE *file = FC_NULL;
     fopen_s(&file, filename, mode);
     return file;
 }
@@ -627,7 +633,7 @@ static inline int fc_private_windows_fclose(FILE *stream) {
 // Outputs to debug window if there is no console and IsDebuggerPresent() returns true.
 static int fc_private_printf(const char *format, ...) {
     int result;
-    if (IsDebuggerPresent() && GetStdHandle(STD_OUTPUT_HANDLE) == NULL) {
+    if (IsDebuggerPresent() && GetStdHandle(STD_OUTPUT_HANDLE) == FC_NULL) {
         char buffer[1024];
         va_list args;
         va_start(args, format);
@@ -688,7 +694,7 @@ static int fc_private_android_dir(ANativeActivity *activity, const char *method_
         jmethodID getAbsolutePathMethod = jniEnv->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
         jstring valueString = reinterpret_cast<jstring>(jniEnv->CallObjectMethod(file, getAbsolutePathMethod));
 
-        const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
+        const char *nativeString = jniEnv->GetStringUTFChars(valueString, FC_NULL);
         if (nativeString) {
             result = 0;
             snprintf(path, path_max, "%s/", nativeString);
@@ -697,7 +703,7 @@ static int fc_private_android_dir(ANativeActivity *activity, const char *method_
         if (jniEnv->ExceptionCheck()) {
             jniEnv->ExceptionClear();
         }
-        jniEnv->PopLocalFrame(NULL);
+        jniEnv->PopLocalFrame(FC_NULL);
     }
 #else
     JNIEnv *jniEnv = fc_private_jnienv(activity->vm);
@@ -712,7 +718,7 @@ static int fc_private_android_dir(ANativeActivity *activity, const char *method_
         jmethodID getAbsolutePathMethod = (*jniEnv)->GetMethodID(jniEnv, fileClass, "getAbsolutePath", "()Ljava/lang/String;");
         jstring valueString = (jstring)(*jniEnv)->CallObjectMethod(jniEnv, file, getAbsolutePathMethod);
 
-        const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, 0);
+        const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, FC_NULL);
         if (nativeString) {
             result = 0;
             snprintf(path, path_max, "%s/", nativeString);
@@ -721,7 +727,7 @@ static int fc_private_android_dir(ANativeActivity *activity, const char *method_
         if ((*jniEnv)->ExceptionCheck(jniEnv)) {
             (*jniEnv)->ExceptionClear(jniEnv);
         }
-        (*jniEnv)->PopLocalFrame(jniEnv, NULL);
+        (*jniEnv)->PopLocalFrame(jniEnv, FC_NULL);
     }
 #endif
     if (result != 0) {
@@ -759,7 +765,7 @@ static int fc_private_android_locale(ANativeActivity *activity,
         jmethodID toStringMethod = jniEnv->GetMethodID(localeClass, "toString", "()Ljava/lang/String;");
         jstring valueString = reinterpret_cast<jstring>(jniEnv->CallObjectMethod(localeObject, toStringMethod));
 
-        const char *nativeString = jniEnv->GetStringUTFChars(valueString, 0);
+        const char *nativeString = jniEnv->GetStringUTFChars(valueString, FC_NULL);
         if (nativeString) {
             result = 0;
             strncpy(locale, nativeString, locale_max);
@@ -769,7 +775,7 @@ static int fc_private_android_locale(ANativeActivity *activity,
         if (jniEnv->ExceptionCheck()) {
             jniEnv->ExceptionClear();
         }
-        jniEnv->PopLocalFrame(NULL);
+        jniEnv->PopLocalFrame(FC_NULL);
     }
 #else
     JNIEnv *jniEnv = fc_private_jnienv(activity->vm);
@@ -797,7 +803,7 @@ static int fc_private_android_locale(ANativeActivity *activity,
             "()Ljava/lang/String;");
         jstring valueString = (*jniEnv)->CallObjectMethod(jniEnv, localeObject, toStringMethod);
 
-        const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, 0);
+        const char *nativeString = (*jniEnv)->GetStringUTFChars(jniEnv, valueString, FC_NULL);
         if (nativeString) {
             result = 0;
             strncpy(locale, nativeString, locale_max);
@@ -807,7 +813,7 @@ static int fc_private_android_locale(ANativeActivity *activity,
         if ((*jniEnv)->ExceptionCheck(jniEnv)) {
             (*jniEnv)->ExceptionClear(jniEnv);
         }
-        (*jniEnv)->PopLocalFrame(jniEnv, NULL);
+        (*jniEnv)->PopLocalFrame(jniEnv, FC_NULL);
     }
 #endif // !defined(__cplusplus)
     if (result == 0) {
@@ -870,14 +876,14 @@ static void fc_private_create_jnienv_key() {
 }
 
 static JNIEnv *fc_private_jnienv(JavaVM *vm) {
-    JNIEnv *jniEnv = NULL;
+    JNIEnv *jniEnv = FC_NULL;
     int setThreadLocal;
 #ifdef __cplusplus
     setThreadLocal = (vm->GetEnv(FC_REINTERPRET_CAST(void **)(&jniEnv), JNI_VERSION_1_4) != JNI_OK &&
-            vm->AttachCurrentThread(&jniEnv, NULL) == JNI_OK);
+            vm->AttachCurrentThread(&jniEnv, FC_NULL) == JNI_OK);
 #else
     setThreadLocal = ((*vm)->GetEnv(vm, (void **)&jniEnv, JNI_VERSION_1_4) != JNI_OK &&
-            (*vm)->AttachCurrentThread(vm, &jniEnv, NULL) == JNI_OK);
+            (*vm)->AttachCurrentThread(vm, &jniEnv, FC_NULL) == JNI_OK);
 #endif
     if (setThreadLocal) {
         pthread_once(&fc_private_jnienv_key_once, fc_private_create_jnienv_key);
@@ -908,8 +914,8 @@ static int fc_private_android_close(void *cookie) {
 }
 
 static FILE *fc_private_android_fopen(ANativeActivity *activity, const char *filename, const char *mode) {
-    AAssetManager *assetManager = NULL;
-    AAsset *asset = NULL;
+    AAssetManager *assetManager = FC_NULL;
+    AAsset *asset = FC_NULL;
     if (activity) {
         assetManager = activity->assetManager;
     }
