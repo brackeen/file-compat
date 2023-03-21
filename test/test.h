@@ -14,12 +14,7 @@ ANativeActivity *android_activity;
 
 static const char APP_ID[] = "FileCompatTestApp";
 
-#if defined(__EMSCRIPTEN__)
-EMSCRIPTEN_KEEPALIVE extern "C"
-#else
-static
-#endif
-int test_writeable_dir(const char *dir_name, const char *datadir_path) {
+static int test_writeable_dir(const char *dir_name, const char *datadir_path) {
     char path[PATH_MAX];
     strcpy(path, datadir_path);
     strcat(path, "count.txt");
@@ -70,12 +65,8 @@ int test_writeable_dir(const char *dir_name, const char *datadir_path) {
 }
 
 static int test_file_writing(void) {
-#if defined(__ANDROID__)
-    assert(android_activity != NULL);
-#endif
-
-    static char data_path[PATH_MAX];
-    static char cache_path[PATH_MAX];
+    char data_path[PATH_MAX];
+    char cache_path[PATH_MAX];
     if (fc_datadir(APP_ID, data_path, PATH_MAX)) {
         printf("Error: Couldn't get data dir\n");
         return -1;
@@ -85,31 +76,10 @@ static int test_file_writing(void) {
         return -1;
     }
 
-#if !defined(__EMSCRIPTEN__)
     int result = 0;
     result += test_writeable_dir("Data", data_path);
     result += test_writeable_dir("Cache", cache_path);
     return result;
-#else
-    // Load contents of the path into memory
-    EM_ASM({
-        let data_path = UTF8ToString($1);
-        let cache_path = UTF8ToString($3);
-        FS.mount(IDBFS, {}, data_path);
-        FS.mount(IDBFS, {}, cache_path);
-        FS.syncfs(true, function (err) {
-            assert(!err);
-            // Test writing
-            _test_writeable_dir($0, $1);
-            _test_writeable_dir($2, $3);
-            // Persist contents of files
-            FS.syncfs(function (err) {
-                assert(!err);
-            });
-        });
-    }, "Data", data_path, "Cache", cache_path);
-    return 0;
-#endif
 }
 
 static void test_basic(void) {
@@ -124,6 +94,43 @@ static void test_basic(void) {
     fc_resdir(path, PATH_MAX);
     printf("Resources dir: \"%s\"\n", path);
 }
+
+#if defined(__EMSCRIPTEN__)
+#  ifdef __cplusplus
+extern "C"
+#  endif
+EMSCRIPTEN_KEEPALIVE int test_all(void);
+#else
+static
+#endif
+int test_all(void) {
+    test_basic();
+    return test_file_writing();
+}
+
+#if defined(__EMSCRIPTEN__)
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-variable-declarations"
+
+EM_JS(void, sync_and_test_all, (const char *data_path, const char *cache_path), {
+    // Load contents of the paths into memory
+    FS.mount(IDBFS, {}, UTF8ToString(data_path));
+    FS.mount(IDBFS, {}, UTF8ToString(cache_path));
+    FS.syncfs(true, function (err) {
+        assert(!err);
+        var result = _test_all();
+        // Persist contents of files
+        FS.syncfs(function (err) {
+            assert(!err);
+            console.log("Result: " + result);
+        });
+    });
+})
+
+#pragma clang diagnostic pop
+
+#endif
 
 int main(void) {
 #if defined(__OBJC__)
@@ -142,8 +149,23 @@ int main(void) {
     printf("__cplusplus=%li\n", __cplusplus);
 #endif
 
-    test_basic();
-    return test_file_writing();
+#if defined(__ANDROID__)
+    assert(android_activity != NULL);
+    if (android_activity == NULL) {
+        return -1;
+    }
+#endif
+
+#if defined(__EMSCRIPTEN__)
+    char data_path[PATH_MAX];
+    char cache_path[PATH_MAX];
+    fc_datadir(APP_ID, data_path, PATH_MAX);
+    fc_cachedir(APP_ID, cache_path, PATH_MAX);
+    sync_and_test_all(data_path, cache_path);
+    return 0;
+#else
+    return test_all();
+#endif
 }
 
 #if defined(__ANDROID__)
