@@ -165,7 +165,7 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  define FC_REINTERPRET_CAST(value_type) (value_type)
 #endif
 
-static void fc__locale_clean(char *locale) {
+static void fc_private_locale_clean(char *locale) {
     // Convert underscore to dash ("en_US" to "en-US")
     // Remove encoding ("en-US.UTF-8" to "en-US")
     char *ch = locale;
@@ -191,8 +191,8 @@ static void fc__locale_clean(char *locale) {
 /// If `env_var` is available, the resulting path is `getenv(env_var)/app_id/`.
 /// Otherwise, the resulting path is `getenv("HOME")/default_path/app_id/`.
 ///
-/// Example: `fc__unixdir("XDG_DATA_HOME", ".local/share", "MyApp", path, path_max);`
-static int fc__unixdir(const char *env_var, const char *default_path,
+/// Example: `fc_private_unixdir("XDG_DATA_HOME", ".local/share", "MyApp", path, path_max);`
+static int fc_private_unixdir(const char *env_var, const char *default_path,
                        const char *app_id, char *path, size_t path_max) {
     int result = -1;
     const char *env_path = getenv(env_var);
@@ -257,8 +257,8 @@ id NSSearchPathForDirectoriesInDomains(NSUInteger directory, NSUInteger domainMa
 
 /// *Apple only:* Gets a path using `NSSearchPathForDirectoriesInDomains`
 /// - Parameter searchPathDirectory: A `NSSearchPathDirectory`.
-static int fc__appledir(NSUInteger searchPathDirectory,
-                        const char *app_id, char *path, size_t path_max) {
+static int fc_private_appledir(NSUInteger searchPathDirectory,
+                               const char *app_id, char *path, size_t path_max) {
     const NSUInteger NSUserDomainMask = 1;
     int result = -1;
 
@@ -401,12 +401,12 @@ static int fc_resdir(char *path, size_t path_max) {
 
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
     const NSUInteger NSApplicationSupportDirectory = 14;
-    return fc__appledir(NSApplicationSupportDirectory, app_id, path, path_max);
+    return fc_private_appledir(NSApplicationSupportDirectory, app_id, path, path_max);
 }
 
 static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
     const NSUInteger NSCachesDirectory = 13;
-    return fc__appledir(NSCachesDirectory, app_id, path, path_max);
+    return fc_private_appledir(NSCachesDirectory, app_id, path, path_max);
 }
 
 static int fc_locale(char *locale, size_t locale_max) {
@@ -436,7 +436,7 @@ static int fc_locale(char *locale, size_t locale_max) {
     }
     FC_AUTORELEASEPOOL_END
     if (result == 0) {
-        fc__locale_clean(locale);
+        fc_private_locale_clean(locale);
     } else {
         locale[0] = 0;
     }
@@ -472,11 +472,11 @@ static int fc_resdir(char *path, size_t path_max) {
 }
 
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
-    return fc__unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
+    return fc_private_unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
 }
 
 static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
-    return fc__unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
+    return fc_private_unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
 }
 
 static int fc_locale(char *locale, size_t locale_max) {
@@ -492,7 +492,7 @@ static int fc_locale(char *locale, size_t locale_max) {
         locale[locale_max - 1] = 0;
     }
     if (result == 0) {
-        fc__locale_clean(locale);
+        fc_private_locale_clean(locale);
     } else {
         locale[0] = 0;
     }
@@ -518,8 +518,8 @@ static int fc_locale(char *locale, size_t locale_max) {
 #endif
 
 /// *Windows only:* Gets a path using `SHGetKnownFolderPath`, and appends `app_id` to it.
-static int fc__win32dir(REFKNOWNFOLDERID folder_id,
-                        const char *app_id, char *path, size_t path_max) {
+static int fc_private_win32dir(REFKNOWNFOLDERID folder_id,
+                               const char *app_id, char *path, size_t path_max) {
     wchar_t *wpath = NULL;
     size_t count = 0; // Output count including NULL
     size_t app_id_length = strlen(app_id);
@@ -570,17 +570,17 @@ static int fc_resdir(char *path, size_t path_max) {
 
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
 #ifdef __cplusplus
-    return fc__win32dir(FOLDERID_RoamingAppData, app_id, path, path_max);
+    return fc_private_win32dir(FOLDERID_RoamingAppData, app_id, path, path_max);
 #else
-    return fc__win32dir(&FOLDERID_RoamingAppData, app_id, path, path_max);
+    return fc_private_win32dir(&FOLDERID_RoamingAppData, app_id, path, path_max);
 #endif
 }
 
 static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
 #ifdef __cplusplus
-    return fc__win32dir(FOLDERID_LocalAppData, app_id, path, path_max);
+    return fc_private_win32dir(FOLDERID_LocalAppData, app_id, path, path_max);
 #else
-    return fc__win32dir(&FOLDERID_LocalAppData, app_id, path, path_max);
+    return fc_private_win32dir(&FOLDERID_LocalAppData, app_id, path, path_max);
 #endif
 }
 
@@ -597,20 +597,20 @@ static int fc_locale(char *locale, size_t locale_max) {
         }
     }
     if (result == 0) {
-        fc__locale_clean(locale);
+        fc_private_locale_clean(locale);
     } else {
         locale[0] = 0;
     }
     return result;
 }
 
-static inline FILE *fc__windows_fopen(const char *filename, const char *mode) {
+static inline FILE *fc_private_windows_fopen(const char *filename, const char *mode) {
     FILE *file = NULL;
     fopen_s(&file, filename, mode);
     return file;
 }
 
-static inline int fc__windows_fclose(FILE *stream) {
+static inline int fc_private_windows_fclose(FILE *stream) {
     // The Windows fclose() function will crash if stream is NULL
     if (stream) {
         return fclose(stream);
@@ -619,13 +619,13 @@ static inline int fc__windows_fclose(FILE *stream) {
     }
 }
 
-#define fopen(filename, mode) fc__windows_fopen(filename, mode)
-#define fclose(file) fc__windows_fclose(file)
+#define fopen(filename, mode) fc_private_windows_fopen(filename, mode)
+#define fclose(file) fc_private_windows_fclose(file)
 
 #if defined(_DEBUG)
 
 // Outputs to debug window if there is no console and IsDebuggerPresent() returns true.
-static int fc__printf(const char *format, ...) {
+static int fc_private_printf(const char *format, ...) {
     int result;
     if (IsDebuggerPresent() && GetStdHandle(STD_OUTPUT_HANDLE) == NULL) {
         char buffer[1024];
@@ -645,7 +645,7 @@ static int fc__printf(const char *format, ...) {
     return result;
 }
 
-#define printf(format, ...) fc__printf(format, __VA_ARGS__)
+#define printf(format, ...) fc_private_printf(format, __VA_ARGS__)
 
 #endif // _DEBUG
 
@@ -662,11 +662,11 @@ static int fc__printf(const char *format, ...) {
 #include <pthread.h>
 #include <string.h>
 
-static JNIEnv *fc__jnienv(JavaVM *vm);
+static JNIEnv *fc_private_jnienv(JavaVM *vm);
 
 /// *Android Only:* Gets a path from a `Context` method like `getFilesDir` or `getCacheDir`.
-static int fc__android_dir(ANativeActivity *activity, const char *method_name,
-                           const char *app_id, char *path, size_t path_max) {
+static int fc_private_android_dir(ANativeActivity *activity, const char *method_name,
+                                  const char *app_id, char *path, size_t path_max) {
     (void)app_id;
     if (!activity) {
         path[0] = 0;
@@ -675,7 +675,7 @@ static int fc__android_dir(ANativeActivity *activity, const char *method_name,
     int result = -1;
 
 #ifdef __cplusplus
-    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    JNIEnv *jniEnv = fc_private_jnienv(activity->vm);
     if (jniEnv->ExceptionCheck()) {
         jniEnv->ExceptionClear();
     }
@@ -700,7 +700,7 @@ static int fc__android_dir(ANativeActivity *activity, const char *method_name,
         jniEnv->PopLocalFrame(NULL);
     }
 #else
-    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    JNIEnv *jniEnv = fc_private_jnienv(activity->vm);
     if ((*jniEnv)->ExceptionCheck(jniEnv)) {
         (*jniEnv)->ExceptionClear(jniEnv);
     }
@@ -730,15 +730,15 @@ static int fc__android_dir(ANativeActivity *activity, const char *method_name,
     return result;
 }
 
-static int fc__android_locale(ANativeActivity *activity,
-                              char *locale, size_t locale_max) {
+static int fc_private_android_locale(ANativeActivity *activity,
+                                     char *locale, size_t locale_max) {
     if (!locale || locale_max < 3 || !activity) {
         return -1;
     }
     int result = -1;
     // getResources().getConfiguration().locale.toString()
 #ifdef __cplusplus
-    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    JNIEnv *jniEnv = fc_private_jnienv(activity->vm);
     if (jniEnv->ExceptionCheck()) {
         jniEnv->ExceptionClear();
     }
@@ -772,7 +772,7 @@ static int fc__android_locale(ANativeActivity *activity,
         jniEnv->PopLocalFrame(NULL);
     }
 #else
-    JNIEnv *jniEnv = fc__jnienv(activity->vm);
+    JNIEnv *jniEnv = fc_private_jnienv(activity->vm);
     if ((*jniEnv)->ExceptionCheck(jniEnv)) {
         (*jniEnv)->ExceptionClear(jniEnv);
     }
@@ -811,7 +811,7 @@ static int fc__android_locale(ANativeActivity *activity,
     }
 #endif // !defined(__cplusplus)
     if (result == 0) {
-        fc__locale_clean(locale);
+        fc_private_locale_clean(locale);
     } else {
         locale[0] = 0;
     }
@@ -832,16 +832,16 @@ static int fc_resdir(char *path, size_t path_max) {
 ///
 ///     ANativeActivity *functionThatGetsAndroidActivity(void);
 ///     #define FILE_COMPAT_ANDROID_ACTIVITY functionThatGetsAndroidActivity()
-#define fc__android_activity() FILE_COMPAT_ANDROID_ACTIVITY
+#define fc_private_android_activity() FILE_COMPAT_ANDROID_ACTIVITY
 
 #define fc_datadir(app_id, path, path_max) \
-    fc__android_dir(fc__android_activity(), "getFilesDir", (app_id), (path), (path_max))
+    fc_private_android_dir(fc_private_android_activity(), "getFilesDir", (app_id), (path), (path_max))
 
 #define fc_cachedir(app_id, path, path_max) \
-    fc__android_dir(fc__android_activity(), "getCacheDir", (app_id), (path), (path_max))
+    fc_private_android_dir(fc_private_android_activity(), "getCacheDir", (app_id), (path), (path_max))
 
 #define fc_locale(locale, locale_max) \
-    fc__android_locale(fc__android_activity(), (locale), (locale_max))
+    fc_private_android_locale(fc_private_android_activity(), (locale), (locale_max))
 
 #if !defined(_BSD_SOURCE)
 FILE* funopen(const void* __cookie,
@@ -851,10 +851,10 @@ FILE* funopen(const void* __cookie,
               int (*__close_fn)(void*));
 #endif // _BSD_SOURCE
 
-static pthread_key_t fc__jnienv_key;
-static pthread_once_t fc__jnienv_key_once = PTHREAD_ONCE_INIT;
+static pthread_key_t fc_private_jnienv_key;
+static pthread_once_t fc_private_jnienv_key_once = PTHREAD_ONCE_INIT;
 
-static void fc__jnienv_detach(void *value) {
+static void fc_private_jnienv_detach(void *value) {
     if (value) {
         JavaVM *vm = FC_REINTERPRET_CAST(JavaVM *)(value);
 #ifdef __cplusplus
@@ -865,11 +865,11 @@ static void fc__jnienv_detach(void *value) {
     }
 }
 
-static void fc__create_jnienv_key() {
-    pthread_key_create(&fc__jnienv_key, fc__jnienv_detach);
+static void fc_private_create_jnienv_key() {
+    pthread_key_create(&fc_private_jnienv_key, fc_private_jnienv_detach);
 }
 
-static JNIEnv *fc__jnienv(JavaVM *vm) {
+static JNIEnv *fc_private_jnienv(JavaVM *vm) {
     JNIEnv *jniEnv = NULL;
     int setThreadLocal;
 #ifdef __cplusplus
@@ -880,17 +880,17 @@ static JNIEnv *fc__jnienv(JavaVM *vm) {
             (*vm)->AttachCurrentThread(vm, &jniEnv, NULL) == JNI_OK);
 #endif
     if (setThreadLocal) {
-        pthread_once(&fc__jnienv_key_once, fc__create_jnienv_key);
-        pthread_setspecific(fc__jnienv_key, vm);
+        pthread_once(&fc_private_jnienv_key_once, fc_private_create_jnienv_key);
+        pthread_setspecific(fc_private_jnienv_key, vm);
     }
     return jniEnv;
 }
 
-static int fc__android_read(void *cookie, char *buf, int size) {
+static int fc_private_android_read(void *cookie, char *buf, int size) {
     return AAsset_read(FC_REINTERPRET_CAST(AAsset *)(cookie), buf, FC_STATIC_CAST(size_t)(size));
 }
 
-static int fc__android_write(void *cookie, const char *buf, int size) {
+static int fc_private_android_write(void *cookie, const char *buf, int size) {
     (void)cookie;
     (void)buf;
     (void)size;
@@ -898,16 +898,16 @@ static int fc__android_write(void *cookie, const char *buf, int size) {
     return -1;
 }
 
-static fpos_t fc__android_seek(void *cookie, fpos_t offset, int whence) {
+static fpos_t fc_private_android_seek(void *cookie, fpos_t offset, int whence) {
     return AAsset_seek(FC_REINTERPRET_CAST(AAsset *)(cookie), offset, whence);
 }
 
-static int fc__android_close(void *cookie) {
+static int fc_private_android_close(void *cookie) {
     AAsset_close(FC_REINTERPRET_CAST(AAsset *)(cookie));
     return 0;
 }
 
-static FILE *fc__android_fopen(ANativeActivity *activity, const char *filename, const char *mode) {
+static FILE *fc_private_android_fopen(ANativeActivity *activity, const char *filename, const char *mode) {
     AAssetManager *assetManager = NULL;
     AAsset *asset = NULL;
     if (activity) {
@@ -917,15 +917,15 @@ static FILE *fc__android_fopen(ANativeActivity *activity, const char *filename, 
         asset = AAssetManager_open(assetManager, filename, AASSET_MODE_UNKNOWN);
     }
     if (asset) {
-        return funopen(asset, fc__android_read, fc__android_write, fc__android_seek,
-                       fc__android_close);
+        return funopen(asset, fc_private_android_read, fc_private_android_write, fc_private_android_seek,
+                       fc_private_android_close);
     } else {
         return fopen(filename, mode);
     }
 }
 
 #define printf(...) __android_log_print(ANDROID_LOG_INFO, "stdout", __VA_ARGS__)
-#define fopen(filename, mode) fc__android_fopen(fc__android_activity(), (filename), (mode))
+#define fopen(filename, mode) fc_private_android_fopen(fc_private_android_activity(), (filename), (mode))
 
 #endif // defined(__ANDROID__)
 
@@ -949,11 +949,11 @@ static int fc_resdir(char *path, size_t path_max) {
 }
 
 static int fc_datadir(const char *app_id, char *path, size_t path_max) {
-    return fc__unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
+    return fc_private_unixdir("XDG_DATA_HOME", ".local/share", app_id, path, path_max);
 }
 
 static int fc_cachedir(const char *app_id, char *path, size_t path_max) {
-    return fc__unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
+    return fc_private_unixdir("XDG_CACHE_HOME", ".cache", app_id, path, path_max);
 }
 
 static int fc_locale(char *locale, size_t locale_max) {
@@ -974,7 +974,7 @@ static int fc_locale(char *locale, size_t locale_max) {
         locale[locale_max - 1] = 0;
     }
     if (result == 0) {
-        fc__locale_clean(locale);
+        fc_private_locale_clean(locale);
     } else {
         locale[0] = 0;
     }
