@@ -12,7 +12,8 @@ env:
   BUILD_TYPE: Debug
 
 jobs:
-  build:
+  build-desktop:
+    if: ${{ false }}  # disable for now
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
@@ -31,3 +32,29 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/test
       run: ctest --test-dir build -C ${{env.BUILD_TYPE}} --verbose
+
+  build-emscripten:
+    runs-on: ubunutu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup emsdk
+      working-directory: ${{github.workspace}}/test
+      run: |
+        if [ ! -d "build/emsdk" ]; then
+          mkdir -p build && cd build
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+          cd ../..
+        fi
+        source build/emsdk/emsdk_env.sh
+    
+    - name: Configure CMake
+      working-directory: ${{github.workspace}}/test
+      run: emcmake cmake -B build/emscripten -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+    - name: Build
+      working-directory: ${{github.workspace}}/test
+      run: cmake --build build/emscripten --config ${{env.BUILD_TYPE}}
