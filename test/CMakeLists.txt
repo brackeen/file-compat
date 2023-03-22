@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 11) # Android needs C++11 for __VA_ARGS__
 
 if (CMAKE_C_COMPILER_ID MATCHES "Clang")
-    set(file_compat_flags_c "-Weverything -Wwrite-strings -Wno-used-but-marked-unused -Wno-declaration-after-statement -Wno-c++98-compat -Wno-c++98-compat-pedantic -Werror")
+    set(file_compat_flags_c "-Weverything -Wwrite-strings -Wno-used-but-marked-unused -Wno-declaration-after-statement -Wno-unknown-warning-option -Wno-unsafe-buffer-usage -Wno-c++98-compat -Wno-c++98-compat-pedantic -Werror")
     set(file_compat_flags_cxx "-fno-rtti -fno-exceptions ${file_compat_flags_c}")
     set(file_compat_flags_objc "-x objective-c -fno-objc-arc ${file_compat_flags_c}")
     set(file_compat_flags_objc_arc "-x objective-c -fobjc-arc ${file_compat_flags_c}")
