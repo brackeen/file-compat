@@ -62,11 +62,11 @@ jobs:
       with:
         ndk-version: r25c
         add-to-path: false
-      env:
-        ANDROID_NDK_HOME: ${{steps.setup-ndk.outputs.ndk-path}}
         
     - name: Configure CMake
       working-directory: ${{github.workspace}}/test
+      env:
+        ANDROID_NDK_HOME: ${{steps.setup-ndk.outputs.ndk-path}}
       run: cmake -B build/android -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=${{env.ANDROID_NDK_HOME}}/build/cmake/android.toolchain.cmake
 
     - name: Build
