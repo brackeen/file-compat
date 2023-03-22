@@ -34,7 +34,7 @@ jobs:
       run: ctest --test-dir build -C ${{env.BUILD_TYPE}} --verbose
 
   build-emscripten:
-    runs-on: ubunutu-latest
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
 
