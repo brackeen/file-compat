@@ -199,7 +199,7 @@ static void fc_private_locale_clean(char *locale) {
 ///
 /// Example: `fc_private_unixdir("XDG_DATA_HOME", ".local/share", "MyApp", path, path_max);`
 static int fc_private_unixdir(const char *env_var, const char *default_path,
-                       const char *app_id, char *path, size_t path_max) {
+                              const char *app_id, char *path, size_t path_max) {
     int result = -1;
     const char *env_path = getenv(env_var);
     if (env_path && *env_path) {
