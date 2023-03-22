@@ -7,30 +7,40 @@ The [test.yml](../.github/workflows/test.yml) GitHub Action uses the [CMakeLists
 * Linux: C, C++
 * Windows: C, C++
 * macOS: C, C++, Objective-C, Objective-C++ (both with and without ARC).
+* Emscripten: C, C++ (build only, no test)
+* Android: C, C++ (build only, no test)
+
+The tests involve reading and writing to files in the directories from `fc_datadir` and `fc_cachedir`.
 
 On macOS, plain executables are tested, but bundled sandboxed apps are not.
 
-## Testing manually
-
-Additionally, these can be built and tested manually:
-* Android: C, C++
-* Emscripten: C, C++
-
 The iOS version does not have tests, but it uses the same code as macOS.
 
-### Linux, macOS, Windows
+## Testing manually
+
+### Linux
 ```
-cmake -B build && cmake --build build && ctest --test-dir build -C Debug --verbose
+cmake -B build/linux && cmake --build build/linux && ctest --test-dir build/linux --verbose
 ```
 
-### Emscripten
+### macOS
+```
+cmake -B build/macos && cmake --build build/macos && ctest --test-dir build/macos --verbose
+```
+
+### Windows
+```
+cmake -B build\windows && cmake --build build\windows && ctest --test-dir build\windows -C Debug --verbose
+```
+
+### Emscripten (build and run in browser)
 
 ```
-emcmake cmake -B build && cmake --build build && emrun build/file_compat_test_c.html
+emcmake cmake -B build/emscripten && cmake --build build/emscripten && emrun build/emscripten/file_compat_test_c.html
 ```
 
 ### Android (build only)
 
 ```
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake && cmake --build build
+cmake -B build/android -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake && cmake --build build/android
 ```
