@@ -241,7 +241,7 @@ static int fc_private_unixdir(const char *env_var, const char *default_path,
 #include <objc/message.h>
 #include <objc/NSObjCRuntime.h>
 #include <sys/stat.h> // mkdir
-#if defined(__OBJC__) && __has_feature(objc_arc)
+#if defined(__OBJC__)
 #  define FC_AUTORELEASEPOOL_BEGIN @autoreleasepool {
 #  define FC_AUTORELEASEPOOL_END }
 #else
