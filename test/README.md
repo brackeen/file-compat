@@ -4,11 +4,11 @@
 
 The [test.yml](../.github/workflows/test.yml) GitHub Action uses the [CMakeLists.txt](CMakeLists.txt) file in this directory to test `file_compat.h` for the following platforms and languages:
 
-* Linux: C, C++
-* Windows: C, C++
-* macOS: C, C++, Objective-C, Objective-C++ (both with and without ARC).
-* Emscripten: C, C++ (build only, no test)
-* Android: C, C++ (build only, no test)
+* Linux (GCC): C, C++
+* Windows (MSVC) : C, C++
+* macOS (AppleClang): C, C++, Objective-C, Objective-C++ (both with and without ARC).
+* Emscripten (clang): C, C++ (build only, no test)
+* Android (clang): C, C++ (build only, no test)
 
 The tests involve reading and writing to files in the directories from `fc_datadir` and `fc_cachedir`.
 
@@ -42,5 +42,7 @@ emcmake cmake -B build/emscripten && cmake --build build/emscripten && emrun bui
 ### Android (build only)
 
 ```
-cmake -B build/android -DCMAKE_TOOLCHAIN_FILE=$ANDROID_HOME/ndk/23.2.8568313/build/cmake/android.toolchain.cmake && cmake --build build/android
+cmake -B build/android -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake && cmake --build build/android
 ```
+
+On macOS, `ANDROID_NDK_HOME` is something like "~/Library/Android/sdk/ndk/23.2.8568313"
