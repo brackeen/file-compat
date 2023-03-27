@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22.1) # Max version supported on Android
+cmake_minimum_required(VERSION 3.22.1) # Version supported on Ubuntu 22
 
 project(file_compat_test)
 
