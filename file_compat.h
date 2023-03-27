@@ -458,7 +458,6 @@ static int fc_locale(char *locale, size_t locale_max) {
 #include <locale.h>
 #include <string.h>
 #include <unistd.h> // readlink
-#include <sys/stat.h> // mkdir
 
 static int fc_resdir(char *path, size_t path_max) {
     if (!path || path_max == 0) {
@@ -505,7 +504,7 @@ static int fc_locale(char *locale, size_t locale_max) {
     return result;
 }
 
-#endif // defined(__unix__)
+#endif // defined(__linux__)
 
 // MARK: - Windows
 
