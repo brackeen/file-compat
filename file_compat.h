@@ -157,6 +157,11 @@ static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 #  include <limits.h> // PATH_MAX
 #endif
 
+#if !defined(__APPLE__)
+#  define FC_AUTORELEASEPOOL_BEGIN
+#  define FC_AUTORELEASEPOOL_END
+#endif
+
 #ifdef __cplusplus
 #  define FC_STATIC_CAST(value_type) static_cast<value_type>
 #  define FC_REINTERPRET_CAST(value_type) reinterpret_cast<value_type>
