@@ -151,15 +151,27 @@ static int fc_cachedir(const char *app_id, char *path, size_t path_max) FC_UNUSE
 /// - Returns: 0 on success, -1 on failure.
 static int fc_locale(char *locale, size_t locale_max) FC_UNUSED;
 
+/// The `FC_AUTORELEASEPOOL_BEGIN` and `FC_AUTORELEASEPOOL_END` macros create and destroy an
+/// autorelease pool on Apple platforms. On non-Apple platforms, the macros do nothing.
+///
+/// These macros are useful inside main application loops. For example:
+///
+///     while (!glfwWindowShouldClose(window)) {
+///         FC_AUTORELEASEPOOL_BEGIN
+///         // Do work that may create autoreleased objects
+///         // ...
+///         FC_AUTORELEASEPOOL_END
+///     }
+///
+#if !defined(__APPLE__)
+#  define FC_AUTORELEASEPOOL_BEGIN {
+#  define FC_AUTORELEASEPOOL_END }
+#endif
+
 // MARK: - Private
 
 #if !defined(_WIN32)
 #  include <limits.h> // PATH_MAX
-#endif
-
-#if !defined(__APPLE__)
-#  define FC_AUTORELEASEPOOL_BEGIN
-#  define FC_AUTORELEASEPOOL_END
 #endif
 
 #ifdef __cplusplus
@@ -252,10 +264,10 @@ static int fc_private_unixdir(const char *env_var, const char *default_path,
 #else
 #  define FC_MSG_SEND (FC_REINTERPRET_CAST(id (*)(id, SEL))(objc_msgSend))
 #  define FC_AUTORELEASEPOOL_BEGIN { \
-       id autoreleasePool = FC_MSG_SEND(FC_MSG_SEND(FC_REINTERPRET_CAST(id)(objc_getClass("NSAutoreleasePool")), \
+       id fc_autorelease_pool = FC_MSG_SEND(FC_MSG_SEND(FC_REINTERPRET_CAST(id)(objc_getClass("NSAutoreleasePool")), \
            sel_registerName("alloc")), sel_registerName("init"));
 #  define FC_AUTORELEASEPOOL_END \
-       FC_MSG_SEND(autoreleasePool, sel_registerName("release")); }
+       FC_MSG_SEND(fc_autorelease_pool, sel_registerName("release")); }
 #endif
 
 #ifdef __cplusplus
